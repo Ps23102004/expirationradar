@@ -3,15 +3,81 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Scan pantry items, verify expiration dates, and check for recalls.">
   <title>ExpirationRadar</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>ExpirationRadar</h1>
-  <!-- Phase 1 (frontend team): Scan · Pantry (+Recipes panel) · Digest views.
-       Build against tests/fixtures/*.json until the live API lands.
-       Contract: docs/API.md -->
-  <main id="app"></main>
+  <main class="app-shell" id="app">
+    <header class="site-header">
+      <p class="eyebrow">Pantry awareness, simplified</p>
+      <h1>ExpirationRadar</h1>
+      <p class="tagline">Know what’s in your pantry before it’s too late.</p>
+    </header>
+
+    <nav class="module-tabs" aria-label="ExpirationRadar views">
+      <button class="module-tab is-active" type="button" data-target="scan" aria-controls="scan-view" aria-selected="true">
+        Scan
+      </button>
+      <button class="module-tab" type="button" data-target="pantry" aria-controls="pantry-view" aria-selected="false">
+        Pantry
+      </button>
+      <button class="module-tab" type="button" data-target="digest" aria-controls="digest-view" aria-selected="false">
+        Digest
+      </button>
+    </nav>
+
+    <section class="module-panel scan-panel is-active" id="scan-view" data-view="scan">
+      <div class="scan-card">
+        <div class="scan-card__header">
+          <div>
+            <p class="section-kicker">Add an item</p>
+            <h2>Scan a package or label</h2>
+          </div>
+          <span class="scan-step">Photo → verify → add</span>
+        </div>
+
+        <div class="scan-card__body">
+          <div class="photo-control">
+            <label class="photo-picker" for="scan-photo">
+              <span class="photo-picker__icon" aria-hidden="true">＋</span>
+              <span>
+                <strong>Choose a pantry photo</strong>
+                <small>Use a clear image of the package and expiration date.</small>
+              </span>
+            </label>
+            <input class="sr-only" id="scan-photo" type="file" accept="image/*" capture="environment">
+
+            <div class="photo-preview" id="photo-preview" hidden>
+              <img id="photo-preview-image" alt="Preview of the selected pantry item">
+              <button class="photo-preview__remove" id="remove-photo" type="button" aria-label="Remove selected photo">
+                Remove
+              </button>
+            </div>
+
+            <button class="primary-button scan-button" id="scan-button" type="button" disabled>
+              Scan photo
+            </button>
+          </div>
+
+          <p class="status-message" id="scan-status" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+
+      <div class="scan-results" id="scan-results" aria-live="polite"></div>
+    </section>
+
+    <div class="module-panel" id="pantry-view" data-view="pantry">
+      <!-- Pantry view: built by Terra -->
+    </div>
+
+    <div class="module-panel" id="digest-view" data-view="digest">
+      <!-- Digest view: built by Terra -->
+    </div>
+  </main>
+
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
   <script src="app.js"></script>
 </body>
 </html>
