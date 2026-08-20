@@ -50,8 +50,10 @@ function switchView(name) {
 
 // ---- Scan view ----
 
-// Fixture fallback keeps the Scan view demoable until the backend is live.
-const DEV_MODE = true;
+// Fixture fallback kept the Scan view demoable before the backend existed.
+// The backend has been live since Phase 2 — DEV_MODE off means a failed
+// request surfaces as a real error instead of silently faking success.
+const DEV_MODE = false;
 
 const FIELD_DEFINITIONS = [
   { key: "product_name", label: "Product name", inputType: "text" },
