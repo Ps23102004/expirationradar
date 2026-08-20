@@ -238,12 +238,27 @@ The app must stay fully usable with Ollama completely off and the network down:
 
 ---
 
-## Note for Phase 2 — vision.py
+## Note for Phase 2 — vision.py (SHIPPED)
 
-The upstream `images` kwarg **has been added**: `llm_ladder.ollama_client.chat`
-now takes `images: list[str] | None = None` (base64 strings, no `data:` prefix)
-and passes them into the Ollama `/api/chat` message dict. Backwards compatible —
-text callers emit no `images` key, and llm-ladder's suite is green (189 passed).
-`vision.py` should call `chat(model, prompt, images=[b64])` and catch
-`OllamaConnectionError` / `OllamaModelNotFoundError` from the same module rather
+`llm_ladder.ollama_client.chat` takes `images: list[str] | None = None` (base64
+strings, no `data:` prefix) and, since Phase 2, `timeout: float = 120` — a cold
+vision-model load can outrun the old hard-coded 120s, and a truncated call is
+indistinguishable from Ollama being off. Both kwargs are backwards compatible;
+llm-ladder's suite is green (189 passed).
+
+`vision.py` calls `chat(model, prompt, images=[b64], timeout=300)` and catches
+`OllamaConnectionError` (which `OllamaModelNotFoundError` subclasses) rather
 than talking to `/api/chat` directly.
+
+**Entry point:** `expirationradar.scan.run_scan(image_bytes) -> ScanResult` is
+the only function `server.py` and `cli.py` call for a scan.
+
+**Vision sentinel:** `vision.extract()` returns `None` when the tier can't run
+(Ollama off, model not pulled, no `vision_extract` chain) and `[]` when it ran
+and saw nothing. `run_scan` turns `None` into `vision_available: false` plus a
+`warnings` entry containing `vision.UNAVAILABLE_NOTE`
+(`"N/A (vision unavailable)"`) and never raises.
+
+**Vision model:** `qwen3-vl:8b`, pulled and verified live on 2026-08-20 (the
+plan's `qwen2.5vl:7b` was superseded — qwen3-vl is in the registry, §5 says
+prefer it). Tag lives in `chains.yaml`.

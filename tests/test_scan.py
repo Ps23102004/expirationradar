@@ -179,7 +179,7 @@ def test_vision_fills_a_missing_date_on_a_barcoded_item(tiers):
 
 
 def test_vision_extras_become_their_own_candidates_on_a_shelf_photo(tiers):
-    tiers["ocr"].return_value = "a blur of shelf text"
+    tiers["ocr"].return_value = ""  # nothing legible; vision is all we have
     tiers["vision"].return_value = [
         _vision_candidate(name="Crunchy Oat Granola", expiry="2027-03-15"),
         _vision_candidate(name="Whole Milk 1 gal", expiry="2026-08-24"),
@@ -245,7 +245,7 @@ def test_vision_never_overrides_a_deterministic_field(tiers, field_name, determi
     disagrees about every single field. The deterministic value must survive
     untouched — value, source and confidence.
     """
-    tiers["ocr"].return_value = "some text so the pipeline runs"
+    tiers["ocr"].return_value = ""  # so every field is vision's to disagree with
     tiers["vision"].return_value = [
         _vision_candidate(
             name="WRONG NAME",
@@ -304,6 +304,43 @@ def test_ollama_off_still_returns_a_full_scan_result(tiers):
     assert c.product_name.value is None  # the hole vision would have filled
     assert result.vision_available is False
     assert any(scan.vision.UNAVAILABLE_NOTE in w for w in result.warnings)
+
+
+def test_ollama_off_still_names_an_ocr_only_item_from_the_raw_text(tiers):
+    """An un-barcoded, undated box whose label OCRs fine must still produce a
+    candidate with Ollama off — otherwise the confirm-edit UI gets nothing."""
+    tiers["ocr"].return_value = "CRUNCHY OAT GRANOLA\nIngredients: rolled oats, honey"
+    tiers["vision"].return_value = None
+    tiers["normalize"].return_value = None  # the text cascade is dead too
+
+    c = scan.run_scan(IMAGE).candidates[0]
+
+    assert (c.product_name.value, c.product_name.source) == (
+        "CRUNCHY OAT GRANOLA",
+        "OCR",
+    )
+    assert c.product_name.confidence < scan._NAME_GUESS_CONFIDENCE  # rougher guess
+
+
+def test_the_raw_name_fallback_skips_date_lines(tiers):
+    tiers["ocr"].return_value = "BEST BY 03/15/2027\nCrunchy Oat Granola"
+    tiers["vision"].return_value = None
+    tiers["normalize"].return_value = None
+
+    c = scan.run_scan(IMAGE).candidates[0]
+
+    assert c.product_name.value == "Crunchy Oat Granola"
+    assert c.expiry_date.value == "2027-03-15"
+
+
+def test_the_raw_name_fallback_never_beats_the_text_cascade(tiers):
+    tiers["ocr"].return_value = "CRUNCHY 0AT GRAN0LA\nnet wt 12 oz"
+    tiers["normalize"].return_value = "Crunchy Oat Granola"
+
+    c = scan.run_scan(IMAGE).candidates[0]
+
+    assert c.product_name.value == "Crunchy Oat Granola"
+    assert c.product_name.confidence == scan._NAME_GUESS_CONFIDENCE
 
 
 def test_ollama_off_leaves_unfillable_fields_null_without_raising(tiers):

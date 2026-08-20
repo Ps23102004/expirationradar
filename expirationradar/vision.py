@@ -38,6 +38,11 @@ UNAVAILABLE_NOTE = "N/A (vision unavailable)"
 # least-trusted thing on the confirm-edit screen.
 VISION_CONFIDENCE = 0.4
 
+# Measured on this machine: ~35s warm, ~110s when a text model is also resident
+# and the 6.1GB vision model has to be re-loaded. llm-ladder's 120s default cut
+# a working cold-start call off mid-flight, so image calls get their own budget.
+_TIMEOUT = 300
+
 _ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
 _NULLISH = {"null", "none", "n/a", "na", "unknown", "not visible", "not legible"}
 
@@ -122,7 +127,12 @@ def extract(image_bytes: bytes) -> list[ScanCandidate] | None:
     if not model:
         return None
     try:
-        resp = chat(model, _PROMPT, images=[base64.b64encode(image_bytes).decode()])
+        resp = chat(
+            model,
+            _PROMPT,
+            images=[base64.b64encode(image_bytes).decode()],
+            timeout=_TIMEOUT,
+        )
     except OllamaConnectionError:
         # Covers OllamaModelNotFoundError too (it subclasses this one).
         return None

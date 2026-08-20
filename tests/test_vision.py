@@ -61,8 +61,11 @@ def test_parses_a_real_single_item_reply():
         assert f.source == "VISION"
         assert f.confidence == vision.VISION_CONFIDENCE < 0.5
 
-    # The image really was sent as base64 on the patched `images` kwarg.
+    # The image really was sent as base64 on the patched `images` kwarg, with
+    # a budget bigger than llm-ladder's 120s default (a cold vision load
+    # exceeds it, and a truncated call looks identical to Ollama being off).
     assert chat.call_args.kwargs["images"] == ["cHJldGVuZC1qcGVnLWJ5dGVz"]
+    assert chat.call_args.kwargs["timeout"] > 120
 
 
 def test_parses_a_multi_item_shelf_reply():

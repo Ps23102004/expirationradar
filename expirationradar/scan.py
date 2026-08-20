@@ -13,6 +13,7 @@ command both call it and nothing else here.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from llm_ladder.engine import run_cascade
@@ -24,7 +25,10 @@ from expirationradar.vision import has_value, load_chain
 
 _OFF_CONFIDENCE = 0.9  # Open Food Facts resolved it from an exact UPC
 _NAME_GUESS_CONFIDENCE = 0.4  # a text model tidying OCR noise into a name
+_RAW_NAME_CONFIDENCE = 0.25  # an untidied OCR line, used when Ollama is off
 _OCR_TEXT_LIMIT = 1500  # a label's worth of text; keeps the local prompt small
+
+_WORDS = re.compile(r"[A-Za-z]{3,}")
 
 
 def run_scan(image_bytes: bytes) -> ScanResult:
@@ -125,9 +129,30 @@ def _guess_name(candidates: list[ScanCandidate], text: str) -> None:
     nameless = [c for c in candidates if c.product_name.value is None]
     if len(nameless) != 1 or not text.strip():
         return
-    guess = _normalize_product(text)
+
+    guess, confidence = _normalize_product(text), _NAME_GUESS_CONFIDENCE
+    if not guess:
+        # Ollama off. Handing the confirm-edit UI a rough line to correct beats
+        # dropping an otherwise-empty candidate and showing the user nothing.
+        guess, confidence = _first_text_line(text), _RAW_NAME_CONFIDENCE
     if guess:
-        nameless[0].product_name = Field(guess, "OCR", _NAME_GUESS_CONFIDENCE)
+        nameless[0].product_name = Field(guess, "OCR", confidence)
+
+
+def _first_text_line(text: str) -> str | None:
+    """The first line of OCR text that reads like words rather than a date.
+
+    # ponytail: packaging prints the product name at the top and tesseract's
+    # sparse-text mode emits roughly top-to-bottom, so "first" beats "longest"
+    # (which lands on the ingredients block). Upgrade path: pick by glyph
+    # height from image_to_data instead of by position.
+    """
+    for line in text.splitlines():
+        line = line.strip()
+        if len(line) < 3 or not _WORDS.search(line) or dates.parse_dates(line):
+            continue
+        return line[:80]
+    return None
 
 
 def _normalize_product(text: str) -> str | None:
