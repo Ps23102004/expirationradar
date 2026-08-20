@@ -890,3 +890,241 @@ input:focus-visible,
     text-align: center;
   }
 }
+
+/* ---- Pantry + Digest ---- */
+
+/* Pantry + Digest */
+
+.view-intro {
+  margin-bottom: 1.5rem;
+}
+
+.view-intro h1,
+.recipe-panel h2 {
+  margin: 0.2rem 0 0.45rem;
+  color: var(--ink);
+}
+
+.view-intro p:not(.section-kicker) {
+  margin: 0;
+  color: var(--muted);
+}
+
+.pantry-list-section,
+.recipe-panel,
+.digest-section {
+  margin-top: 1.5rem;
+}
+
+.pantry-item-list,
+.recipe-list,
+.digest-recall-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.pantry-item-card {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.pantry-item-card--expired {
+  border-color: var(--recall-line);
+  background: var(--recall-bg);
+}
+
+.pantry-item-card--soon {
+  border-color: var(--borderline);
+  background: var(--borderline-bg);
+}
+
+.pantry-item-card__header {
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.pantry-item-card__header h3,
+.recipe-card h3 {
+  margin: 0;
+  color: var(--ink);
+}
+
+.pantry-item-card__brand {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+}
+
+.pantry-item-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  padding: 0 26px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.pantry-item-card__expiry {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.pantry-item-card__notes {
+  margin: 0;
+  padding: 0 26px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+/* Non-header rows (meta/notes/actions) have no bottom padding of their own
+   until they're the last child — bottom padding lives here instead of on
+   every row so it doesn't double up when several rows are present. */
+.pantry-item-card > *:last-child {
+  padding-bottom: 26px;
+}
+
+.item-urgency {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.7rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.item-urgency--expired {
+  text-transform: uppercase;
+}
+
+.item-urgency--soon {
+  color: var(--borderline);
+  background: var(--borderline-bg);
+  border: 1px solid var(--borderline);
+}
+
+.pantry-item-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.15rem 26px 0;
+}
+
+.secondary-button {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.48rem 0.75rem;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.secondary-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.secondary-button--danger:hover:not(:disabled) {
+  border-color: var(--recall);
+  background: var(--recall-bg);
+  color: var(--recall-strong);
+}
+
+.recipe-panel {
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.recipe-panel__empty,
+.digest-section__empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.recipe-card {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium);
+  background: var(--surface-soft);
+  box-shadow: var(--shadow);
+}
+
+.recipe-card p {
+  margin: 0.8rem 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.recipe-card__uses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.recipe-use-tag {
+  padding: 0.22rem 0.48rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.digest-section {
+  padding-top: 1.35rem;
+  border-top: 1px solid var(--line);
+}
+
+.digest-section--recalls {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.digest-section__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.digest-section__heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.digest-section__heading span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+@media (max-width: 520px) {
+  .pantry-item-card__header {
+    flex-direction: column;
+  }
+
+  .pantry-item-card__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .secondary-button {
+    width: 100%;
+  }
+}

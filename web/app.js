@@ -686,3 +686,433 @@ scanButton.addEventListener("click", scanSelectedPhoto);
 scanResults.addEventListener("click", handleScanResultsClick);
 scanResults.addEventListener("focusout", handleScanResultsFocusOut);
 scanResults.addEventListener("keydown", handleScanResultsKeydown);
+
+// ---- Pantry + Digest views ----
+
+// Pantry + Digest views
+
+let pantryItems = [];
+let cachedRecipes = null;
+let pantryLoaded = false;
+let digestLoaded = false;
+
+async function fetchPantryItems() {
+  try {
+    const response = await fetch("/api/pantry");
+    if (!response.ok) throw new Error(await errorMessageFor(response));
+    return await response.json();
+  } catch (error) {
+    if (!DEV_MODE) throw error;
+    console.info("Pantry API unavailable; loading the local fixture.", error);
+    const fixtureResponse = await fetch("../tests/fixtures/pantry.json");
+    if (!fixtureResponse.ok) throw new Error(await errorMessageFor(fixtureResponse));
+    return await fixtureResponse.json();
+  }
+}
+
+async function fetchDigest() {
+  try {
+    const response = await fetch("/api/digest");
+    if (!response.ok) throw new Error(await errorMessageFor(response));
+    return await response.json();
+  } catch (error) {
+    if (!DEV_MODE) throw error;
+    console.info("Digest API unavailable; loading the local fixture.", error);
+    const fixtureResponse = await fetch("../tests/fixtures/digest.json");
+    if (!fixtureResponse.ok) throw new Error(await errorMessageFor(fixtureResponse));
+    return await fixtureResponse.json();
+  }
+}
+
+async function fetchRecipes() {
+  try {
+    const response = await fetch("/api/recipes");
+    if (!response.ok) throw new Error(await errorMessageFor(response));
+    return await response.json();
+  } catch (error) {
+    if (!DEV_MODE) throw error;
+    console.info("Recipes API unavailable; loading the local fixture.", error);
+    const fixtureResponse = await fetch("../tests/fixtures/recipes.json");
+    if (!fixtureResponse.ok) throw new Error(await errorMessageFor(fixtureResponse));
+    return await fixtureResponse.json();
+  }
+}
+
+async function consumePantryItem(id) {
+  try {
+    const response = await fetch(`/api/pantry/${encodeURIComponent(id)}/consume`, {
+      method: "POST"
+    });
+    if (!response.ok) throw new Error(await errorMessageFor(response));
+    return { devMode: false };
+  } catch (error) {
+    if (!DEV_MODE) throw error;
+    console.info("Pantry API unavailable; simulating a successful consume.", id, error);
+    return { devMode: true };
+  }
+}
+
+async function deletePantryItem(id) {
+  try {
+    const response = await fetch(`/api/pantry/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+    if (!response.ok) throw new Error(await errorMessageFor(response));
+    return { devMode: false };
+  } catch (error) {
+    if (!DEV_MODE) throw error;
+    console.info("Pantry API unavailable; simulating a successful delete.", id, error);
+    return { devMode: true };
+  }
+}
+
+function parseExpiryDate(value) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function startOfToday() {
+  const today = new Date();
+  return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+}
+
+function expiryInfo(expiryDate) {
+  const date = parseExpiryDate(expiryDate);
+  if (!date) return { kind: "undated", daysUntil: null };
+
+  const daysUntil = Math.round((date - startOfToday()) / 86400000);
+  if (daysUntil < 0) return { kind: "expired", daysUntil };
+  if (daysUntil <= 5) return { kind: "soon", daysUntil };
+  return { kind: "normal", daysUntil };
+}
+
+function formatExpiryDate(expiryDate) {
+  const date = parseExpiryDate(expiryDate);
+  if (!date) return "No expiry date";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(date);
+}
+
+function formatTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(date);
+}
+
+function sortPantryItems(items) {
+  return [...items].sort((a, b) => {
+    if (!a.expiry_date && !b.expiry_date) return 0;
+    if (!a.expiry_date) return 1;
+    if (!b.expiry_date) return -1;
+    return parseExpiryDate(a.expiry_date) - parseExpiryDate(b.expiry_date);
+  });
+}
+
+function renderUrgencyBadge(item) {
+  const urgency = expiryInfo(item.expiry_date);
+
+  if (urgency.kind === "expired") {
+    return '<span class="recall-status recall-status--ongoing item-urgency item-urgency--expired">EXPIRED</span>';
+  }
+
+  if (urgency.kind === "soon") {
+    const label = urgency.daysUntil === 0
+      ? "Expires today"
+      : urgency.daysUntil === 1
+        ? "Expires tomorrow"
+        : `Expires in ${urgency.daysUntil} days`;
+
+    return `<span class="item-urgency item-urgency--soon">${label}</span>`;
+  }
+
+  return "";
+}
+
+function renderPantryItem(item, options = {}) {
+  const interactive = options.interactive === true;
+  const urgency = expiryInfo(item.expiry_date);
+  const cardClass = urgency.kind === "expired"
+    ? " pantry-item-card--expired"
+    : urgency.kind === "soon"
+      ? " pantry-item-card--soon"
+      : "";
+
+  const brand = item.brand
+    ? `<p class="pantry-item-card__brand">${escapeHtml(item.brand)}</p>`
+    : "";
+
+  const quantity = Number(item.quantity) > 1
+    ? `<span>Qty ${escapeHtml(item.quantity)}</span>`
+    : "";
+
+  const source = item.source
+    ? `<span class="source-badge ${sourceClass(item.source)}">${escapeHtml(item.source)}</span>`
+    : "";
+
+  const notes = item.notes
+    ? `<p class="pantry-item-card__notes">${escapeHtml(item.notes)}</p>`
+    : "";
+
+  const actions = interactive
+    ? `
+      <div class="pantry-item-card__actions">
+        <button class="secondary-button" type="button" data-pantry-action="consume" data-item-id="${escapeHtml(item.id)}">
+          Consume
+        </button>
+        <button class="secondary-button secondary-button--danger" type="button" data-pantry-action="delete" data-item-id="${escapeHtml(item.id)}">
+          Delete
+        </button>
+      </div>
+    `
+    : "";
+
+  return `
+    <article class="candidate-card pantry-item-card${cardClass}">
+      <div class="candidate-card__header pantry-item-card__header">
+        <div>
+          <h3>${escapeHtml(item.product_name || "Unnamed item")}</h3>
+          ${brand}
+        </div>
+        ${renderUrgencyBadge(item)}
+      </div>
+      <div class="pantry-item-card__meta">
+        <span class="pantry-item-card__expiry">${formatExpiryDate(item.expiry_date)}</span>
+        ${quantity}
+        ${source}
+      </div>
+      ${notes}
+      ${actions}
+    </article>
+  `;
+}
+
+function renderRecipePanel(recipes) {
+  if (!recipes.available) {
+    return `
+      <section class="recipe-panel">
+        <p class="section-kicker">Recipes</p>
+        <h2>Use it up before it’s gone</h2>
+        <p class="recipe-panel__empty">Recipe suggestions aren’t available right now.</p>
+      </section>
+    `;
+  }
+
+  const suggestions = (recipes.suggestions || []).slice(0, 3);
+
+  return `
+    <section class="recipe-panel">
+      <p class="section-kicker">Recipes</p>
+      <h2>Use it up before it’s gone</h2>
+      <div class="recipe-list">
+        ${suggestions.map((recipe) => `
+          <article class="recipe-card">
+            <h3>${escapeHtml(recipe.title)}</h3>
+            <div class="recipe-card__uses">
+              ${(recipe.uses || []).map((item) =>
+                `<span class="recipe-use-tag">${escapeHtml(item)}</span>`
+              ).join("")}
+            </div>
+            <p>${escapeHtml(recipe.steps)}</p>
+          </article>
+        `).join("") || '<p class="recipe-panel__empty">No recipe suggestions right now.</p>'}
+      </div>
+    </section>
+  `;
+}
+
+function renderPantry() {
+  const content = document.querySelector("#pantry-content");
+  if (!content) return;
+
+  const sortedItems = sortPantryItems(pantryItems);
+
+  content.innerHTML = `
+    <div class="view-intro">
+      <p class="section-kicker">Your pantry</p>
+      <h1>Keep the good stuff in view</h1>
+      <p>Items nearest their expiry date appear first.</p>
+    </div>
+
+    <section class="pantry-list-section">
+      <div class="digest-section__heading">
+        <h2>Pantry items</h2>
+        <span>${sortedItems.length} item${sortedItems.length === 1 ? "" : "s"}</span>
+      </div>
+      <div class="pantry-item-list">
+        ${sortedItems.length
+          ? sortedItems.map((item) => renderPantryItem(item, { interactive: true })).join("")
+          : '<div class="empty-state"><p>Your pantry is clear for now.</p></div>'}
+      </div>
+    </section>
+
+    <div id="recipe-content"></div>
+  `;
+
+  renderRecipes(cachedRecipes);
+}
+
+function renderRecipes(recipes) {
+  const container = document.querySelector("#recipe-content");
+  if (!container) return;
+
+  if (!recipes) {
+    container.innerHTML = `
+      <section class="recipe-panel">
+        <p class="section-kicker">Recipes</p>
+        <h2>Use it up before it’s gone</h2>
+        <p class="recipe-panel__empty">Loading recipe suggestions…</p>
+      </section>
+    `;
+    return;
+  }
+
+  container.innerHTML = renderRecipePanel(recipes);
+}
+
+async function loadPantryView() {
+  if (pantryLoaded) return;
+  pantryLoaded = true;
+
+  const content = document.querySelector("#pantry-content");
+  if (content) {
+    content.innerHTML = '<div class="empty-state"><p>Loading your pantry…</p></div>';
+  }
+
+  try {
+    const [pantry, recipes] = await Promise.all([fetchPantryItems(), fetchRecipes()]);
+    pantryItems = pantry.items || [];
+    cachedRecipes = recipes;
+    renderPantry();
+  } catch (error) {
+    pantryLoaded = false;
+    if (content) {
+      content.innerHTML = `
+        <div class="empty-state">
+          <p>We couldn’t load your pantry.</p>
+          <p>${escapeHtml(error.message)}</p>
+        </div>
+      `;
+    }
+  }
+}
+
+function renderDigestSection(title, items, emptyMessage) {
+  return `
+    <section class="digest-section">
+      <div class="digest-section__heading">
+        <h2>${escapeHtml(title)}</h2>
+        <span>${items.length}</span>
+      </div>
+      ${items.length
+        ? `<div class="pantry-item-list">${items.map((item) => renderPantryItem(item)).join("")}</div>`
+        : `<p class="digest-section__empty">${escapeHtml(emptyMessage)}</p>`}
+    </section>
+  `;
+}
+
+function renderDigest(digest) {
+  const content = document.querySelector("#digest-content");
+  if (!content) return;
+
+  if (!digest.generated_at) {
+    content.innerHTML = `
+      <div class="empty-state">
+        <p class="section-kicker">Digest</p>
+        <h1>Your watcher hasn’t run yet</h1>
+        <p>Check back after ExpirationRadar has had a chance to review your pantry.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const recalls = digest.new_recalls || [];
+  const expired = digest.expired || [];
+  const expiringSoon = digest.expiring_soon || [];
+
+  content.innerHTML = `
+    <div class="view-intro digest-intro">
+      <p class="section-kicker">Digest</p>
+      <h1>What happened since you last checked</h1>
+      <p>Last updated ${escapeHtml(formatTimestamp(digest.generated_at))}</p>
+    </div>
+
+    <section class="digest-section digest-section--recalls">
+      <div class="digest-section__heading">
+        <h2>New recalls</h2>
+        <span>${recalls.length}</span>
+      </div>
+      ${recalls.length
+        ? `<div class="digest-recall-list">${recalls.map(renderRecall).join("")}</div>`
+        : '<p class="digest-section__empty">No new recalls were found.</p>'}
+    </section>
+
+    ${renderDigestSection("Expired items", expired, "Nothing has newly expired.")}
+    ${renderDigestSection("Expiring soon", expiringSoon, "Nothing is nearing its expiry date.")}
+  `;
+}
+
+async function loadDigestView() {
+  if (digestLoaded) return;
+  digestLoaded = true;
+
+  const content = document.querySelector("#digest-content");
+  if (content) {
+    content.innerHTML = '<div class="empty-state"><p>Checking for updates…</p></div>';
+  }
+
+  try {
+    renderDigest(await fetchDigest());
+  } catch (error) {
+    digestLoaded = false;
+    if (content) {
+      content.innerHTML = `
+        <div class="empty-state">
+          <p>We couldn’t load your digest.</p>
+          <p>${escapeHtml(error.message)}</p>
+        </div>
+      `;
+    }
+  }
+}
+
+document.querySelector('.module-tab[data-target="pantry"]')?.addEventListener("click", loadPantryView);
+document.querySelector('.module-tab[data-target="digest"]')?.addEventListener("click", loadDigestView);
+
+document.querySelector("#pantry-content")?.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-pantry-action]");
+  if (!button) return;
+
+  const id = button.dataset.itemId;
+  const action = button.dataset.pantryAction;
+  const item = pantryItems.find((pantryItem) => String(pantryItem.id) === id);
+  if (!item) return;
+
+  button.disabled = true;
+
+  try {
+    const result = action === "consume"
+      ? await consumePantryItem(id)
+      : await deletePantryItem(id);
+
+    pantryItems = pantryItems.filter((pantryItem) => String(pantryItem.id) !== id);
+    renderPantry();
+
+    const actionLabel = action === "consume" ? "Consumed" : "Deleted";
+    showToast(
+      result.devMode
+        ? `${actionLabel} ${item.product_name} (dev mode — no live backend yet)`
+        : `${actionLabel} ${item.product_name}`
+    );
+  } catch (error) {
+    button.disabled = false;
+    showToast(`Couldn’t update ${item.product_name}: ${error.message}`);
+  }
+});

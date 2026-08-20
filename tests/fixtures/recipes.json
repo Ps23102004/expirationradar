@@ -1,0 +1,20 @@
+{
+  "suggestions": [
+    {
+      "title": "Spinach and granola breakfast bowl",
+      "uses": ["Baby Spinach, 5 oz", "Whole Milk, 1 gal"],
+      "steps": "Wilt the spinach in a warm pan, top with a splash of milk and a handful of granola."
+    },
+    {
+      "title": "Quick creamed spinach",
+      "uses": ["Baby Spinach, 5 oz", "Whole Milk, 1 gal"],
+      "steps": "Saute spinach until wilted, stir in a few tablespoons of milk, simmer 2 minutes, season and serve."
+    },
+    {
+      "title": "Milk-soaked overnight oats",
+      "uses": ["Whole Milk, 1 gal"],
+      "steps": "Combine oats with milk in a jar, refrigerate overnight, top with fruit in the morning."
+    }
+  ],
+  "available": true
+}
