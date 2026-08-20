@@ -69,7 +69,9 @@ const scanState = {
   editing: null,
   adding: new Set(),
   added: new Set(),
-  messages: new Map()
+  messages: new Map(),
+  bulkAdding: false,
+  bulkProgress: { done: 0, total: 0 }
 };
 
 const scanPhotoInput = document.querySelector("#scan-photo");
@@ -85,6 +87,46 @@ const cameraView = document.querySelector("#camera-view");
 const cameraVideo = document.querySelector("#camera-video");
 const cameraCaptureButton = document.querySelector("#camera-capture");
 const cameraCancelButton = document.querySelector("#camera-cancel");
+const scanModeButtons = document.querySelectorAll("[data-scan-mode]");
+const photoPickerHeading = document.querySelector("#photo-picker-heading");
+const photoPickerHint = document.querySelector("#photo-picker-hint");
+
+// Item scan and receipt scan share every bit of capture UI (file picker,
+// camera) and the whole candidate-review flow — only the endpoint and a
+// couple of copy strings differ, so this is a lookup table, not a branch.
+const SCAN_MODE_COPY = {
+  item: {
+    endpoint: "/api/scan",
+    heading: "Choose a pantry photo",
+    hint: "Use a clear image of the package and expiration date.",
+    scanning: "Scanning the photo for products, dates, and recalls…"
+  },
+  receipt: {
+    endpoint: "/api/scan-receipt",
+    heading: "Choose a receipt photo",
+    hint: "Use a clear photo of the printed receipt. Expiry dates are estimated — receipts don't print them.",
+    scanning: "Scanning the receipt for items…"
+  }
+};
+
+let scanMode = "item";
+
+function setScanMode(mode) {
+  if (!SCAN_MODE_COPY[mode] || mode === scanMode) {
+    return;
+  }
+
+  scanMode = mode;
+  scanModeButtons.forEach((button) => {
+    const isActive = button.dataset.scanMode === mode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  const copy = SCAN_MODE_COPY[mode];
+  if (photoPickerHeading) photoPickerHeading.textContent = copy.heading;
+  if (photoPickerHint) photoPickerHint.textContent = copy.hint;
+}
 
 let previewObjectUrl = null;
 // The blob/File currently queued for scanning — set by either the file
@@ -148,15 +190,18 @@ function readFileAsBase64(file) {
 
 function sourceClass(source) {
   const normalized = String(source || "").toLowerCase();
-  return ["barcode", "ocr", "vision", "user"].includes(normalized)
+  return ["barcode", "ocr", "vision", "user", "estimated"].includes(normalized)
     ? `badge--${normalized}`
     : "badge--user";
 }
 
-function confidenceLabel(confidence) {
+function confidenceLabel(confidence, source) {
   const score = Number(confidence);
   const safeScore = Number.isFinite(score) ? Math.min(1, Math.max(0, score)) : 0;
-  return `${Math.round(safeScore * 100)}% confidence`;
+  const pct = `${Math.round(safeScore * 100)}% confidence`;
+  return String(source || "").toUpperCase() === "ESTIMATED"
+    ? `Estimated — not printed anywhere, review before trusting. ${pct}`
+    : pct;
 }
 
 function formatReportDate(value) {
@@ -201,7 +246,7 @@ function renderField(candidateIndex, definition, field) {
           data-field-name="${escapeHtml(definition.key)}"
           autocomplete="off"
         >
-        <span class="candidate-field__confidence">${escapeHtml(confidenceLabel(field.confidence))}</span>
+        <span class="candidate-field__confidence">${escapeHtml(confidenceLabel(field.confidence, source))}</span>
       </div>
     `;
   }
@@ -224,7 +269,7 @@ function renderField(candidateIndex, definition, field) {
         <span>${escapeHtml(displayFieldValue(field))}</span>
         <span class="edit-mark" aria-hidden="true">Edit</span>
       </button>
-      <span class="candidate-field__confidence">${escapeHtml(confidenceLabel(field.confidence))}</span>
+      <span class="candidate-field__confidence">${escapeHtml(confidenceLabel(field.confidence, source))}</span>
     </div>
   `;
 }
@@ -353,6 +398,64 @@ function renderWarnings(warnings) {
   `;
 }
 
+function renderBulkAddButton() {
+  const pendingCount = scanState.candidates.filter((_, index) => !scanState.added.has(index)).length;
+
+  // Stays visible mid-run even as pendingCount drops candidate-by-candidate;
+  // hides once idle with 0-1 left, matching "only when >1 un-added candidate".
+  if (!scanState.bulkAdding && pendingCount < 2) {
+    return "";
+  }
+
+  const label = scanState.bulkAdding
+    ? `Adding ${scanState.bulkProgress.done} of ${scanState.bulkProgress.total}…`
+    : `Add all ${pendingCount} items to pantry`;
+
+  return `
+    <div class="bulk-add-bar">
+      <button
+        class="primary-button bulk-add-button"
+        type="button"
+        data-action="bulk-add-all"
+        ${scanState.bulkAdding ? "disabled" : ""}
+      >
+        ${label}
+      </button>
+    </div>
+  `;
+}
+
+async function bulkAddAll() {
+  if (scanState.bulkAdding) {
+    return;
+  }
+
+  const pendingIndexes = scanState.candidates
+    .map((_, index) => index)
+    .filter((index) => !scanState.added.has(index) && !scanState.adding.has(index));
+
+  if (pendingIndexes.length < 2) {
+    return;
+  }
+
+  scanState.bulkAdding = true;
+  scanState.bulkProgress = { done: 0, total: pendingIndexes.length };
+  renderScanResults();
+
+  // Sequential on purpose — this isn't a performance-sensitive path, and it
+  // reuses confirmCandidate() (the same per-item add) instead of a parallel
+  // bulk-specific request path.
+  for (const index of pendingIndexes) {
+    await confirmCandidate(index);
+    scanState.bulkProgress.done += 1;
+    renderScanResults();
+  }
+
+  scanState.bulkAdding = false;
+  renderScanResults();
+  showToast(`Added ${scanState.bulkProgress.total} items to pantry`);
+}
+
 function renderScanResults() {
   const warningsMarkup = renderWarnings(scanState.warnings);
 
@@ -382,6 +485,7 @@ function renderScanResults() {
       </div>
       <span>${scanState.candidates.length} ${scanState.candidates.length === 1 ? "item" : "items"} found</span>
     </div>
+    ${renderBulkAddButton()}
     <div class="candidate-list">
       ${scanState.candidates.map(renderCandidateCard).join("")}
     </div>
@@ -416,13 +520,15 @@ function acceptScanResult(result) {
   scanState.adding.clear();
   scanState.added.clear();
   scanState.messages.clear();
+  scanState.bulkAdding = false;
+  scanState.bulkProgress = { done: 0, total: 0 };
 
   renderScanResults();
 }
 
 async function fetchScanResult(imageBase64) {
   try {
-    const response = await fetch("/api/scan", {
+    const response = await fetch(SCAN_MODE_COPY[scanMode].endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -512,7 +618,7 @@ async function scanSelectedPhoto() {
   }
 
   setScanningState(true);
-  scanStatus.textContent = "Scanning the photo for products, dates, and recalls…";
+  scanStatus.textContent = SCAN_MODE_COPY[scanMode].scanning;
 
   try {
     const imageBase64 = await readFileAsBase64(selectedPhotoBlob);
@@ -747,6 +853,10 @@ function handleScanResultsClick(event) {
   if (actionButton.dataset.action === "confirm-candidate") {
     confirmCandidate(candidateIndex);
   }
+
+  if (actionButton.dataset.action === "bulk-add-all") {
+    bulkAddAll();
+  }
 }
 
 function handleScanResultsFocusOut(event) {
@@ -783,6 +893,10 @@ document.querySelectorAll(".module-tab[data-target]").forEach((tab) => {
       stopCamera();
     }
   });
+});
+
+scanModeButtons.forEach((button) => {
+  button.addEventListener("click", () => setScanMode(button.dataset.scanMode));
 });
 
 scanPhotoInput.addEventListener("change", updatePhotoPreview);

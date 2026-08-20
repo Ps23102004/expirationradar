@@ -2,6 +2,7 @@
 
 Serves web/ plus the frozen JSON API in docs/API.md:
     POST   /api/scan               {image_base64} -> ScanResult
+    POST   /api/scan-receipt       {image_base64} -> ScanResult (ESTIMATED expiry)
     GET    /api/pantry             ?all=true       -> {"items": [PantryItem]}
     POST   /api/pantry             PantryItem     -> PantryItem
     POST   /api/pantry/{id}/consume               -> PantryItem
@@ -27,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from expirationradar import pantry, recipes, restock, safety, scan
+from expirationradar import pantry, receipt, recipes, restock, safety, scan
 from expirationradar.models import PantryItem, to_json_dict
 
 DEFAULT_PORT = 8000
@@ -122,15 +123,22 @@ def _recipes_payload(days: int) -> dict:
     return {"suggestions": to_json_dict(suggestions), "available": True}
 
 
-def _scan_payload(body: dict) -> dict:
+def _decode_image(body: dict) -> bytes:
     image_b64 = body.get("image_base64")
     if not isinstance(image_b64, str) or not image_b64.strip():
         raise _BadRequestError("'image_base64' is required")
     try:
-        image_bytes = base64.b64decode(image_b64, validate=True)
+        return base64.b64decode(image_b64, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise _BadRequestError(f"'image_base64' is not valid base64: {exc}")
-    return to_json_dict(scan.run_scan(image_bytes))
+
+
+def _scan_payload(body: dict) -> dict:
+    return to_json_dict(scan.run_scan(_decode_image(body)))
+
+
+def _scan_receipt_payload(body: dict) -> dict:
+    return to_json_dict(receipt.parse_receipt(_decode_image(body)))
 
 
 def _int_query_param(query: dict, name: str, default: int) -> int:
@@ -280,6 +288,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/scan":
             body = self._read_json_body()
             self._send_json(HTTPStatus.OK, _scan_payload(body))
+            return
+
+        if path == "/api/scan-receipt":
+            body = self._read_json_body()
+            self._send_json(HTTPStatus.OK, _scan_receipt_payload(body))
             return
 
         if path == "/api/pantry":

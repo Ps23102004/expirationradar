@@ -32,6 +32,8 @@
   --vision-bg: #def4f1;
   --user: #3e4945;
   --user-bg: #e7eae8;
+  --estimated: #8a5a00;
+  --estimated-bg: #fff6e2;
 
   --shadow: 0 16px 44px rgba(32, 54, 44, 0.08);
   --radius-large: 22px;
@@ -205,6 +207,39 @@ input:focus-visible,
 .scan-card__body,
 .candidate-card__body {
   padding: 26px;
+}
+
+.scan-mode-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+
+.scan-mode-toggle__option {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
+.scan-mode-toggle__option:hover {
+  color: var(--ink);
+}
+
+.scan-mode-toggle__option.is-active {
+  color: #fff;
+  background: var(--accent-strong);
+  box-shadow: 0 4px 10px rgba(23, 88, 59, 0.18);
 }
 
 .photo-control {
@@ -430,6 +465,14 @@ input:focus-visible,
   font-weight: 700;
 }
 
+.bulk-add-bar {
+  margin-bottom: 16px;
+}
+
+.bulk-add-button {
+  width: 100%;
+}
+
 .candidate-list {
   display: grid;
   gap: 24px;
@@ -650,6 +693,12 @@ input:focus-visible,
 .badge--user {
   color: var(--user);
   background: var(--user-bg);
+}
+
+.badge--estimated {
+  color: var(--estimated);
+  background: var(--estimated-bg);
+  border: 1px dashed var(--estimated);
 }
 
 .candidate-field__value {

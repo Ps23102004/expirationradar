@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from expirationradar import openfda, pantry, recipes as recipes_module, safety, scan as scan_module
+from expirationradar import openfda, pantry, receipt as receipt_module, recipes as recipes_module, safety, scan as scan_module
 from expirationradar.models import PantryItem, to_json_dict
 from expirationradar.server import read_digest
 
@@ -44,13 +44,16 @@ def _print_scan_result(result) -> None:
 
 @app.command()
 def scan(
-    image: str = typer.Argument(..., help="Path to a photo of the pantry item."),
+    image: str = typer.Argument(..., help="Path to a photo of the pantry item or receipt."),
+    receipt: bool = typer.Option(
+        False, "--receipt", help="Scan a grocery receipt instead of a single item (estimated expiry dates)."
+    ),
     json_out: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation and add every candidate to the pantry."),
 ) -> None:
-    """Scan a photo for product/expiry info and live FDA recalls."""
+    """Scan a photo for product/expiry info and live FDA recalls, or a receipt with --receipt."""
     image_bytes = Path(image).read_bytes()
-    result = scan_module.run_scan(image_bytes)
+    result = receipt_module.parse_receipt(image_bytes) if receipt else scan_module.run_scan(image_bytes)
 
     if json_out:
         print(json.dumps(to_json_dict(result), indent=2))

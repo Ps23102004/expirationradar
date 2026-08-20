@@ -38,12 +38,21 @@
         </div>
 
         <div class="scan-card__body">
+          <div class="scan-mode-toggle" role="tablist" aria-label="What to scan">
+            <button class="scan-mode-toggle__option is-active" type="button" data-scan-mode="item" role="tab" aria-selected="true">
+              Scan an item
+            </button>
+            <button class="scan-mode-toggle__option" type="button" data-scan-mode="receipt" role="tab" aria-selected="false">
+              Scan a receipt
+            </button>
+          </div>
+
           <div class="photo-control">
             <label class="photo-picker" for="scan-photo">
               <span class="photo-picker__icon" aria-hidden="true">＋</span>
               <span>
-                <strong>Choose a pantry photo</strong>
-                <small>Use a clear image of the package and expiration date.</small>
+                <strong id="photo-picker-heading">Choose a pantry photo</strong>
+                <small id="photo-picker-hint">Use a clear image of the package and expiration date.</small>
               </span>
             </label>
             <input class="sr-only" id="scan-photo" type="file" accept="image/*" capture="environment">

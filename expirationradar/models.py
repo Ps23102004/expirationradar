@@ -12,7 +12,9 @@ from typing import Any
 
 # Where a field's value came from. Deterministic sources outrank the LLM one:
 # BARCODE > OCR > VISION, and USER (a confirm-edit correction) outranks all.
-PROVENANCE = ("BARCODE", "OCR", "VISION", "USER")
+# ESTIMATED (receipt.py) is lowest of all — it's a shelf-life guess, not a
+# read of any kind; always shown with a visibly low confidence.
+PROVENANCE = ("BARCODE", "OCR", "VISION", "USER", "ESTIMATED")
 
 # openFDA enforcement.json statuses we care about; "Ongoing" is the loud one.
 RECALL_STATUSES = ("Ongoing", "Completed", "Terminated")

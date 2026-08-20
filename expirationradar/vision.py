@@ -65,6 +65,25 @@ Rules:
 - If no product is visible at all, return [].
 """
 
+# receipt.py's vision fallback: triggered when OCR + the parse_receipt text
+# chain can't produce line items (garbled photo, Ollama's text tier off).
+RECEIPT_PROMPT = """You are looking at a photo of a grocery store receipt.
+
+Return ONLY a JSON array. No prose, no explanation, no markdown code fences.
+
+One object per purchased product line item, in this exact shape:
+[{"name": "...", "category_guess": "..."}]
+
+Rules:
+- Ignore prices, quantities, SKUs, subtotals, tax, payment info, and store/
+  header boilerplate — only real product line items.
+- "name" is the product name as best you can read it.
+- "category_guess" is your best single-word-or-short-phrase guess at its food
+  category (e.g. "dairy", "produce", "meat", "frozen", "canned", "bakery",
+  "snack", "condiment", "grain"). Guess your best category even if unsure.
+- If you can't read any line items at all, return [].
+"""
+
 
 def load_chain(name: str) -> ChainConfig | None:
     """Accessor for this repo's chains.yaml (§5). None = chain not configured.
@@ -116,12 +135,10 @@ def is_available() -> bool:
     return model in tags or f"{model}:latest" in tags
 
 
-def extract(image_bytes: bytes) -> list[ScanCandidate] | None:
-    """One image call → candidates with VISION-sourced fields.
-
-    `None` means the tier is unavailable (Ollama off, model not pulled, or no
-    `vision_extract` chain configured) — the caller degrades to
-    UNAVAILABLE_NOTE. `[]` means vision ran and saw nothing.
+def _call_vision(prompt: str, image_bytes: bytes) -> list[dict] | None:
+    """One image call → the parsed JSON array of dicts, or `None` if the tier
+    is unavailable (Ollama off, model not pulled, or no `vision_extract` chain
+    configured). Shared by `extract` and `extract_receipt_items`.
     """
     model = vision_model()
     if not model:
@@ -129,7 +146,7 @@ def extract(image_bytes: bytes) -> list[ScanCandidate] | None:
     try:
         resp = chat(
             model,
-            _PROMPT,
+            prompt,
             images=[base64.b64encode(image_bytes).decode()],
             timeout=_TIMEOUT,
         )
@@ -138,7 +155,29 @@ def extract(image_bytes: bytes) -> list[ScanCandidate] | None:
         return None
 
     content = resp.get("message", {}).get("content", "") if isinstance(resp, dict) else ""
-    return [c for c in (_to_candidate(i) for i in _parse_items(content)) if has_value(c)]
+    return _parse_items(content)
+
+
+def extract(image_bytes: bytes) -> list[ScanCandidate] | None:
+    """One image call → candidates with VISION-sourced fields.
+
+    `None` means the tier is unavailable — the caller degrades to
+    UNAVAILABLE_NOTE. `[]` means vision ran and saw nothing.
+    """
+    items = _call_vision(_PROMPT, image_bytes)
+    if items is None:
+        return None
+    return [c for c in (_to_candidate(i) for i in items) if has_value(c)]
+
+
+def extract_receipt_items(image_bytes: bytes) -> list[dict] | None:
+    """receipt.py's vision fallback: `[{"name", "category_guess"}]` per line
+    item read straight off the photo. Same `None`/`[]` sentinel as `extract`.
+    """
+    items = _call_vision(RECEIPT_PROMPT, image_bytes)
+    if items is None:
+        return None
+    return [i for i in items if isinstance(i.get("name"), str) and i["name"].strip()]
 
 
 def _parse_items(raw: str) -> list[dict]:

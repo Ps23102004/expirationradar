@@ -158,6 +158,50 @@ def test_scan_oversized_body_rejected(live_server):
     assert "exceeds" in payload["error"]
 
 
+# -- /api/scan-receipt ------------------------------------------------------
+
+
+def _receipt_result() -> ScanResult:
+    return ScanResult(
+        candidates=[
+            ScanCandidate(
+                product_name=Field("Whole Milk 1 Gal", "OCR", 0.5),
+                expiry_date=Field("2026-08-27", "ESTIMATED", 0.45),
+            )
+        ],
+        scanned_at="2026-08-20T10:00:00",
+        vision_available=True,
+        warnings=["Expiry dates are estimated from typical shelf life..."],
+    )
+
+
+def test_scan_receipt_success_returns_scan_result(live_server):
+    with patch.object(
+        server_module.receipt, "parse_receipt", return_value=_receipt_result()
+    ) as mock_parse:
+        image_b64 = base64.b64encode(b"fake receipt bytes").decode()
+        status, payload = _post(
+            live_server, "/api/scan-receipt", json.dumps({"image_base64": image_b64}).encode()
+        )
+    assert status == 200
+    assert payload["candidates"][0]["expiry_date"]["source"] == "ESTIMATED"
+    assert mock_parse.call_args.args[0] == b"fake receipt bytes"
+
+
+def test_scan_receipt_missing_image_base64_400(live_server):
+    status, payload = _post(live_server, "/api/scan-receipt", b"{}")
+    assert status == 400
+    assert "image_base64" in payload["error"]
+
+
+def test_scan_receipt_invalid_base64_400(live_server):
+    status, payload = _post(
+        live_server, "/api/scan-receipt", json.dumps({"image_base64": "not base64!!!"}).encode()
+    )
+    assert status == 400
+    assert "base64" in payload["error"]
+
+
 # -- /api/pantry -----------------------------------------------------------
 
 

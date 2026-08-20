@@ -59,6 +59,32 @@ def test_scan_yes_adds_candidates_to_pantry(tmp_path):
     assert [i.product_name for i in items] == ["Milk"]
 
 
+def test_scan_receipt_flag_routes_to_receipt_module(tmp_path):
+    image_path = tmp_path / "receipt.jpg"
+    image_path.write_bytes(b"fake receipt bytes")
+    result = ScanResult(
+        candidates=[
+            ScanCandidate(
+                product_name=Field("Whole Milk 1 Gal", "OCR", 0.5),
+                expiry_date=Field("2026-08-27", "ESTIMATED", 0.45),
+            )
+        ],
+        scanned_at="now",
+    )
+
+    with (
+        patch("expirationradar.cli.receipt_module.parse_receipt", return_value=result) as mock_parse,
+        patch("expirationradar.cli.scan_module.run_scan") as mock_scan,
+    ):
+        invocation = runner.invoke(cli.app, ["scan", str(image_path), "--receipt", "--json"])
+
+    assert invocation.exit_code == 0
+    mock_parse.assert_called_once_with(b"fake receipt bytes")
+    mock_scan.assert_not_called()
+    printed = json.loads(invocation.stdout)
+    assert printed["candidates"][0]["expiry_date"]["source"] == "ESTIMATED"
+
+
 def test_scan_without_yes_prompts_and_skips_on_no(tmp_path):
     image_path = tmp_path / "photo.jpg"
     image_path.write_bytes(b"fake jpeg bytes")

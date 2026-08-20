@@ -10,6 +10,10 @@ chains:
     - model: gemma4:e4b-mlx
       samples: 3
       threshold: 0.7
+  parse_receipt:
+    - model: gemma4:e4b-mlx
+      samples: 1
+      threshold: 0.5
   recipes:
     - model: gemma4:e4b-mlx
       samples: 1

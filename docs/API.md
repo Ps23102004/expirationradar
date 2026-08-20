@@ -31,11 +31,18 @@ nesting are identical everywhere they appear.
 | key | type | notes |
 |---|---|---|
 | `value` | `string \| null` | `null` = nothing extracted. The UI renders "N/A", not an error. |
-| `source` | `"BARCODE" \| "OCR" \| "VISION" \| "USER"` | Drives the provenance badge. |
+| `source` | `"BARCODE" \| "OCR" \| "VISION" \| "USER" \| "ESTIMATED"` | Drives the provenance badge. |
 | `confidence` | `number` | `0.0`–`1.0`. `0.0` whenever `value` is `null`. |
 
 Precedence, enforced server-side: `USER` > `BARCODE` > `OCR` > `VISION`. The
 vision tier only ever fills a hole — it never overwrites a deterministic read.
+
+`ESTIMATED` is a fifth, separate source used only by `POST /api/scan-receipt`:
+an expiry date computed from typical shelf-life-from-purchase (see
+`expirationradar/shelf_life.py`), not read off anything printed. It is never
+mixed into `/api/scan`'s precedence chain above — it always carries a low
+confidence (`~0.3`–`0.45`) so the UI can render it as visibly a guess, not a
+real date.
 
 ### `RecallMatch`
 
@@ -140,6 +147,33 @@ the OCR/vision fallback path with `null` brand and `null` upc).
   soft notice, never as a failure.
 - Scanning **does not** write to the pantry. The confirm-edit UI POSTs the
   accepted candidates to `/api/pantry` afterwards.
+- `400` if `image_base64` is missing or not valid base64.
+
+### `POST /api/scan-receipt`
+
+Same request/response shape as `POST /api/scan` — a `ScanResult` — for a
+photo of a grocery **receipt** instead of a single product. Receipts print a
+purchase date and item names, never an expiry date, so every candidate's
+`expiry_date` is computed (`expirationradar/shelf_life.py`: purchase date +
+typical shelf-life-from-purchase for that item's category) with
+`source: "ESTIMATED"` and a low `confidence` (`~0.3`–`0.45`) — never treat an
+`ESTIMATED` date as a real printed one.
+
+```json
+{ "image_base64": "<base64 of a JPEG/PNG receipt photo, no data: prefix>" }
+```
+
+- `candidates` — one per parsed receipt line item. `upc` and `brand` are
+  always `null` (a receipt has no per-item barcode); `recalls` is always `[]`
+  — the recall cross-reference is skipped for receipts (no barcode to match,
+  and line-item names are too noisy for a reliable product-description
+  search), noted in `warnings` instead of attempted unreliably.
+- `warnings` always includes an estimate-disclosure notice ("review before
+  adding") and the recall-skip notice above, plus any OCR/vision degradation.
+- Purchase date used for the estimate: the first date `dates.py` finds
+  anywhere in the receipt's OCR text, or today if none is found.
+- Same one-by-one and bulk-add flows as `/api/scan` apply client-side — this
+  endpoint only returns candidates, it never writes to the pantry.
 - `400` if `image_base64` is missing or not valid base64.
 
 ### `GET /api/pantry`
@@ -277,7 +311,7 @@ The app must stay fully usable with Ollama completely off and the network down:
 
 | Broken | Still works | Degrades to |
 |---|---|---|
-| Ollama off / vision model not pulled | barcode, OCR, dates, pantry, recalls, watcher | `vision_available: false`, VISION fields `null`, `/api/recipes` → `available: false` |
+| Ollama off / vision model not pulled | barcode, OCR, dates, pantry, recalls, watcher | `vision_available: false`, VISION fields `null`, `/api/recipes` → `available: false`. `/api/scan-receipt` still returns candidates — the `parse_receipt` text chain degrades to a raw OCR line as the name, shelf-life estimate still runs |
 | Network down | pantry, expiry checks, watcher's local pass | `recalls: []` plus a `warnings` entry; the scheduled job never crashes |
 | openFDA returns HTTP 404 | everything | that is **"no recall"**, not an error — `recalls: []` |
 
