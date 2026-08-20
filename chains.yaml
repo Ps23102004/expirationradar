@@ -1,6 +1,9 @@
 chains:
   vision_extract:
-    - model: qwen2.5vl:7b
+    # Verified live 2026-08-20: pulled (6.1GB) and one real image call returned
+    # clean, fence-free JSON with a correctly normalized ISO date. Preferred
+    # over the plan's qwen2.5vl:7b because qwen3-vl is in the registry (§5).
+    - model: qwen3-vl:8b
       samples: 1
       threshold: 0.6
   normalize_product:
