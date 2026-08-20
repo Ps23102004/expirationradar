@@ -548,15 +548,36 @@ function stopCamera() {
   cameraView.hidden = true;
 }
 
+// getUserMedia() has no built-in timeout — a stalled camera driver or a
+// permission prompt the browser never resolves leaves the promise pending
+// forever, and the button would silently do nothing. Race it against a
+// timeout so the UI always lands somewhere (camera preview, or the
+// file-picker fallback message). If the real call resolves after we've
+// already given up, stop its tracks immediately — otherwise it would be a
+// live, forgotten stream with the camera light stuck on.
+const CAMERA_TIMEOUT_MS = 8000;
+
 async function startCamera() {
   if (!cameraSupported()) {
     return;
   }
 
+  let timedOut = false;
+  const request = navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+
+  request.then((stream) => {
+    if (timedOut) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+  }, () => {});
+
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" }
-    });
+    cameraStream = await Promise.race([
+      request,
+      new Promise((_, reject) => {
+        setTimeout(() => { timedOut = true; reject(new Error("camera timed out")); }, CAMERA_TIMEOUT_MS);
+      })
+    ]);
   } catch (error) {
     console.error(error);
     stopCamera();
@@ -1008,7 +1029,7 @@ function renderUsageControl(item) {
       </label>
       <input
         class="pantry-item-card__usage-range"
-        type="range" min="0" max="100" step="5" value="${percent}"
+        type="range" min="0" max="100" step="1" value="${percent}"
         id="usage-${id}" data-usage-input data-item-id="${id}"
       >
       <button class="secondary-button" type="button" data-pantry-action="log-usage" data-item-id="${id}">
