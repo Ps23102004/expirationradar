@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "python-barcode"]
 
 [project.scripts]
 expirationradar = "expirationradar.cli:app"
