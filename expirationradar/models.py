@@ -80,6 +80,8 @@ class PantryItem:
     added_at: str = ""  # ISO 8601
     consumed_at: str | None = None  # None = still active
     notes: str = ""
+    percent_remaining: float = 100.0  # manual self-report, restock forecasting (Feature 1)
+    safety_note: dict | None = None  # {risk_note, advice}; set only when EXPIRED (Feature 2)
     id: int | None = None
 
 
@@ -115,6 +117,9 @@ class Digest:
     expiring_soon: list[PantryItem] = field(default_factory=list)
     expired: list[PantryItem] = field(default_factory=list)
     new_recalls: list[RecallMatch] = field(default_factory=list)
+    # {item_id, item_name, days_until_empty, message} per item under the
+    # restock threshold (restock.py Feature 1). [] on old digest files.
+    restock_forecasts: list[dict] = field(default_factory=list)
 
 
 def to_json_dict(obj: Any) -> Any:

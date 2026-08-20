@@ -80,8 +80,19 @@ const photoPreview = document.querySelector("#photo-preview");
 const photoPreviewImage = document.querySelector("#photo-preview-image");
 const removePhotoButton = document.querySelector("#remove-photo");
 const toastRegion = document.querySelector("#toast-region");
+const cameraToggleButton = document.querySelector("#camera-toggle");
+const cameraView = document.querySelector("#camera-view");
+const cameraVideo = document.querySelector("#camera-video");
+const cameraCaptureButton = document.querySelector("#camera-capture");
+const cameraCancelButton = document.querySelector("#camera-cancel");
 
 let previewObjectUrl = null;
+// The blob/File currently queued for scanning — set by either the file
+// picker or a camera capture, read by scanSelectedPhoto(). Both paths funnel
+// through readFileAsBase64(), which reads any Blob, so no encoding logic is
+// duplicated between them.
+let selectedPhotoBlob = null;
+let cameraStream = null;
 
 function cloneData(value) {
   if (typeof structuredClone === "function") {
@@ -454,6 +465,7 @@ function setScanningState(isScanning) {
 
 function clearSelectedPhoto() {
   scanPhotoInput.value = "";
+  selectedPhotoBlob = null;
 
   if (previewObjectUrl) {
     URL.revokeObjectURL(previewObjectUrl);
@@ -466,6 +478,22 @@ function clearSelectedPhoto() {
   scanStatus.textContent = "";
 }
 
+// Shared by the file picker and the camera capture button — both hand this a
+// Blob (a File is a Blob) and get the same preview + "ready to scan" state.
+function setSelectedPhoto(blob) {
+  selectedPhotoBlob = blob;
+
+  if (previewObjectUrl) {
+    URL.revokeObjectURL(previewObjectUrl);
+  }
+
+  previewObjectUrl = URL.createObjectURL(blob);
+  photoPreviewImage.src = previewObjectUrl;
+  photoPreview.hidden = false;
+  scanButton.disabled = false;
+  scanStatus.textContent = "Photo ready to scan.";
+}
+
 function updatePhotoPreview() {
   const file = scanPhotoInput.files?.[0];
 
@@ -474,21 +502,11 @@ function updatePhotoPreview() {
     return;
   }
 
-  if (previewObjectUrl) {
-    URL.revokeObjectURL(previewObjectUrl);
-  }
-
-  previewObjectUrl = URL.createObjectURL(file);
-  photoPreviewImage.src = previewObjectUrl;
-  photoPreview.hidden = false;
-  scanButton.disabled = false;
-  scanStatus.textContent = "Photo ready to scan.";
+  setSelectedPhoto(file);
 }
 
 async function scanSelectedPhoto() {
-  const file = scanPhotoInput.files?.[0];
-
-  if (!file) {
+  if (!selectedPhotoBlob) {
     scanStatus.textContent = "Choose a photo before scanning.";
     return;
   }
@@ -497,7 +515,7 @@ async function scanSelectedPhoto() {
   scanStatus.textContent = "Scanning the photo for products, dates, and recalls…";
 
   try {
-    const imageBase64 = await readFileAsBase64(file);
+    const imageBase64 = await readFileAsBase64(selectedPhotoBlob);
     const result = await fetchScanResult(imageBase64);
     acceptScanResult(result);
     scanStatus.textContent = "Scan complete. Review each item before adding it.";
@@ -509,6 +527,65 @@ async function scanSelectedPhoto() {
   } finally {
     setScanningState(false);
   }
+}
+
+// ---- Camera capture ----
+// No client-side barcode decoding: this just grabs one frame from a live
+// preview and feeds it through the exact same setSelectedPhoto() /
+// readFileAsBase64() path a file-picker photo takes, so /api/scan sees an
+// identical request either way.
+
+function cameraSupported() {
+  return Boolean(navigator.mediaDevices?.getUserMedia);
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((track) => track.stop());
+    cameraStream = null;
+  }
+  cameraVideo.srcObject = null;
+  cameraView.hidden = true;
+}
+
+async function startCamera() {
+  if (!cameraSupported()) {
+    return;
+  }
+
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" }
+    });
+  } catch (error) {
+    console.error(error);
+    stopCamera();
+    scanStatus.textContent = "Camera access unavailable — choose a photo instead.";
+    return;
+  }
+
+  cameraVideo.srcObject = cameraStream;
+  cameraView.hidden = false;
+  scanStatus.textContent = "";
+}
+
+function captureCameraFrame() {
+  if (!cameraStream) {
+    return;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = cameraVideo.videoWidth;
+  canvas.height = cameraVideo.videoHeight;
+  canvas.getContext("2d").drawImage(cameraVideo, 0, 0);
+
+  canvas.toBlob((blob) => {
+    if (blob) {
+      scanPhotoInput.value = "";
+      setSelectedPhoto(blob);
+    }
+    stopCamera();
+  }, "image/jpeg", 0.92);
 }
 
 function beginFieldEdit(candidateIndex, fieldName) {
@@ -679,7 +756,12 @@ function handleScanResultsKeydown(event) {
 // ---- Shared event wiring ----
 
 document.querySelectorAll(".module-tab[data-target]").forEach((tab) => {
-  tab.addEventListener("click", () => switchView(tab.dataset.target));
+  tab.addEventListener("click", () => {
+    switchView(tab.dataset.target);
+    if (tab.dataset.target !== "scan") {
+      stopCamera();
+    }
+  });
 });
 
 scanPhotoInput.addEventListener("change", updatePhotoPreview);
@@ -689,12 +771,21 @@ scanResults.addEventListener("click", handleScanResultsClick);
 scanResults.addEventListener("focusout", handleScanResultsFocusOut);
 scanResults.addEventListener("keydown", handleScanResultsKeydown);
 
+if (cameraSupported()) {
+  cameraToggleButton.hidden = false;
+}
+cameraToggleButton.addEventListener("click", startCamera);
+cameraCaptureButton.addEventListener("click", captureCameraFrame);
+cameraCancelButton.addEventListener("click", stopCamera);
+window.addEventListener("pagehide", stopCamera);
+
 // ---- Pantry + Digest views ----
 
 // Pantry + Digest views
 
 let pantryItems = [];
 let cachedRecipes = null;
+let householdSize = 2;
 let pantryLoaded = false;
 let digestLoaded = false;
 
@@ -768,6 +859,56 @@ async function deletePantryItem(id) {
   }
 }
 
+// ---- Settings + log-usage (Feature 2) ----
+// These endpoints (docs/API.md) are landing on the backend in parallel with
+// this UI. Each call tries the real route first; only on failure does it
+// fall back to an in-memory stub, the same DEV_MODE-style bridge the Scan
+// view used between Phase 1 and Phase 2 — once the backend lands, the first
+// successful fetch takes over with no code change here.
+let localHouseholdSize = 2;
+
+async function fetchSettings() {
+  try {
+    const response = await fetch("/api/settings");
+    if (!response.ok) throw new Error(await errorMessageFor(response));
+    return await response.json();
+  } catch (error) {
+    console.info("Settings API unavailable; using local fallback.", error);
+    return { household_size: localHouseholdSize };
+  }
+}
+
+async function saveSettings(householdSize) {
+  try {
+    const response = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ household_size: householdSize })
+    });
+    if (!response.ok) throw new Error(await errorMessageFor(response));
+    return await response.json();
+  } catch (error) {
+    console.info("Settings API unavailable; saving to local fallback.", error);
+    localHouseholdSize = householdSize;
+    return { household_size: localHouseholdSize };
+  }
+}
+
+async function logUsage(id, percentRemaining) {
+  try {
+    const response = await fetch(`/api/pantry/${encodeURIComponent(id)}/log-usage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ percent_remaining: percentRemaining })
+    });
+    if (!response.ok) throw new Error(await errorMessageFor(response));
+    return await response.json();
+  } catch (error) {
+    console.info("Log-usage API unavailable; updating locally.", id, error);
+    return null;
+  }
+}
+
 function parseExpiryDate(value) {
   if (!value) return null;
   const [year, month, day] = value.split("-").map(Number);
@@ -838,6 +979,45 @@ function renderUrgencyBadge(item) {
   return "";
 }
 
+function renderSafetyNote(safetyNote) {
+  if (!safetyNote) {
+    return "";
+  }
+
+  return `
+    <aside class="notice-bar notice-bar--safety" aria-label="Food safety note">
+      <span class="notice-bar__icon" aria-hidden="true">⚠</span>
+      <div>
+        <strong>${escapeHtml(safetyNote.risk_note || "This item has expired.")}</strong>
+        ${safetyNote.advice ? `<p class="notice-bar__advice">${escapeHtml(safetyNote.advice)}</p>` : ""}
+      </div>
+    </aside>
+  `;
+}
+
+function renderUsageControl(item) {
+  const percent = Number.isFinite(Number(item.percent_remaining))
+    ? Math.min(100, Math.max(0, Number(item.percent_remaining)))
+    : 100;
+  const id = escapeHtml(item.id);
+
+  return `
+    <div class="pantry-item-card__usage">
+      <label for="usage-${id}">
+        Remaining <span class="pantry-item-card__usage-value" data-usage-value="${id}">${percent}%</span>
+      </label>
+      <input
+        class="pantry-item-card__usage-range"
+        type="range" min="0" max="100" step="5" value="${percent}"
+        id="usage-${id}" data-usage-input data-item-id="${id}"
+      >
+      <button class="secondary-button" type="button" data-pantry-action="log-usage" data-item-id="${id}">
+        Log usage
+      </button>
+    </div>
+  `;
+}
+
 function renderPantryItem(item, options = {}) {
   const interactive = options.interactive === true;
   const urgency = expiryInfo(item.expiry_date);
@@ -885,12 +1065,14 @@ function renderPantryItem(item, options = {}) {
         </div>
         ${renderUrgencyBadge(item)}
       </div>
+      ${renderSafetyNote(item.safety_note)}
       <div class="pantry-item-card__meta">
         <span class="pantry-item-card__expiry">${formatExpiryDate(item.expiry_date)}</span>
         ${quantity}
         ${source}
       </div>
       ${notes}
+      ${interactive ? renderUsageControl(item) : ""}
       ${actions}
     </article>
   `;
@@ -941,6 +1123,12 @@ function renderPantry() {
       <p class="section-kicker">Your pantry</p>
       <h1>Keep the good stuff in view</h1>
       <p>Items nearest their expiry date appear first.</p>
+      <div class="household-setting">
+        <label for="household-size-input">Household size</label>
+        <input type="number" id="household-size-input" min="1" max="12" step="1" value="${escapeHtml(householdSize)}">
+        <button class="secondary-button" type="button" id="household-size-save">Save</button>
+        <span class="household-setting__status" id="household-size-status" role="status" aria-live="polite"></span>
+      </div>
     </div>
 
     <section class="pantry-list-section">
@@ -989,9 +1177,14 @@ async function loadPantryView() {
   }
 
   try {
-    const [pantry, recipes] = await Promise.all([fetchPantryItems(), fetchRecipes()]);
+    const [pantry, recipes, settings] = await Promise.all([
+      fetchPantryItems(),
+      fetchRecipes(),
+      fetchSettings()
+    ]);
     pantryItems = pantry.items || [];
     cachedRecipes = recipes;
+    householdSize = Number(settings.household_size) || householdSize;
     renderPantry();
   } catch (error) {
     pantryLoaded = false;
@@ -1020,6 +1213,42 @@ function renderDigestSection(title, items, emptyMessage) {
   `;
 }
 
+function restockDaysLabel(days) {
+  const n = Number(days);
+  if (!Number.isFinite(n)) return "Restock soon";
+  if (n <= 0) return "Out now";
+  if (n === 1) return "1 day left";
+  return `${n} days left`;
+}
+
+function renderRestockForecast(forecast) {
+  return `
+    <article class="candidate-card pantry-item-card">
+      <div class="candidate-card__header pantry-item-card__header">
+        <div>
+          <h3>${escapeHtml(forecast.item_name || "Item")}</h3>
+        </div>
+        <span class="item-urgency item-urgency--soon">${escapeHtml(restockDaysLabel(forecast.days_until_empty))}</span>
+      </div>
+      ${forecast.message ? `<p class="pantry-item-card__notes">${escapeHtml(forecast.message)}</p>` : ""}
+    </article>
+  `;
+}
+
+function renderRestockSection(forecasts) {
+  return `
+    <section class="digest-section">
+      <div class="digest-section__heading">
+        <h2>Restock soon</h2>
+        <span>${forecasts.length}</span>
+      </div>
+      ${forecasts.length
+        ? `<div class="pantry-item-list">${forecasts.map(renderRestockForecast).join("")}</div>`
+        : '<p class="digest-section__empty">Nothing needs restocking yet.</p>'}
+    </section>
+  `;
+}
+
 function renderDigest(digest) {
   const content = document.querySelector("#digest-content");
   if (!content) return;
@@ -1038,6 +1267,7 @@ function renderDigest(digest) {
   const recalls = digest.new_recalls || [];
   const expired = digest.expired || [];
   const expiringSoon = digest.expiring_soon || [];
+  const restockForecasts = digest.restock_forecasts || [];
 
   content.innerHTML = `
     <div class="view-intro digest-intro">
@@ -1058,6 +1288,7 @@ function renderDigest(digest) {
 
     ${renderDigestSection("Expired items", expired, "Nothing has newly expired.")}
     ${renderDigestSection("Expiring soon", expiringSoon, "Nothing is nearing its expiry date.")}
+    ${renderRestockSection(restockForecasts)}
   `;
 }
 
@@ -1088,7 +1319,30 @@ async function loadDigestView() {
 document.querySelector('.module-tab[data-target="pantry"]')?.addEventListener("click", loadPantryView);
 document.querySelector('.module-tab[data-target="digest"]')?.addEventListener("click", loadDigestView);
 
+document.querySelector("#pantry-content")?.addEventListener("input", (event) => {
+  const range = event.target.closest("[data-usage-input]");
+  if (!range) return;
+  const label = document.querySelector(`[data-usage-value="${CSS.escape(range.dataset.itemId)}"]`);
+  if (label) label.textContent = `${range.value}%`;
+});
+
 document.querySelector("#pantry-content")?.addEventListener("click", async (event) => {
+  if (event.target.closest("#household-size-save")) {
+    const input = document.querySelector("#household-size-input");
+    const status = document.querySelector("#household-size-status");
+    const size = Math.max(1, Math.round(Number(input.value)) || 1);
+    input.value = size;
+    try {
+      const settings = await saveSettings(size);
+      householdSize = Number(settings.household_size) || size;
+      if (status) status.textContent = "Saved.";
+      showToast("Household size saved");
+    } catch (error) {
+      if (status) status.textContent = `Couldn’t save: ${error.message}`;
+    }
+    return;
+  }
+
   const button = event.target.closest("[data-pantry-action]");
   if (!button) return;
 
@@ -1096,6 +1350,26 @@ document.querySelector("#pantry-content")?.addEventListener("click", async (even
   const action = button.dataset.pantryAction;
   const item = pantryItems.find((pantryItem) => String(pantryItem.id) === id);
   if (!item) return;
+
+  if (action === "log-usage") {
+    const range = document.querySelector(`#usage-${CSS.escape(id)}`);
+    const percent = Number(range?.value ?? 100);
+    button.disabled = true;
+    try {
+      const updated = await logUsage(id, percent);
+      item.percent_remaining = updated ? updated.percent_remaining : percent;
+      showToast(
+        updated
+          ? `Logged ${percent}% remaining for ${item.product_name}`
+          : `Logged ${percent}% remaining for ${item.product_name} (dev mode — no live backend yet)`
+      );
+    } catch (error) {
+      showToast(`Couldn’t log usage for ${item.product_name}: ${error.message}`);
+    } finally {
+      button.disabled = false;
+    }
+    return;
+  }
 
   button.disabled = true;
 

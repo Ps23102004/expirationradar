@@ -73,6 +73,7 @@ def test_digest_fixture_matches_models():
         expiring_soon=[PantryItem(**i) for i in raw["expiring_soon"]],
         expired=[PantryItem(**i) for i in raw["expired"]],
         new_recalls=[RecallMatch(**r) for r in raw["new_recalls"]],
+        restock_forecasts=raw["restock_forecasts"],
     )
     assert to_json_dict(rebuilt) == raw
 

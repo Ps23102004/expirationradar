@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from expirationradar import openfda, pantry, recipes as recipes_module, scan as scan_module
+from expirationradar import openfda, pantry, recipes as recipes_module, safety, scan as scan_module
 from expirationradar.models import PantryItem, to_json_dict
 from expirationradar.server import read_digest
 
@@ -93,6 +93,7 @@ def pantry_list(all: bool = False, json_out: bool = typer.Option(False, "--json"
         items = pantry.list_items(conn, include_consumed=all)
     finally:
         conn.close()
+    safety.annotate_expired(items)
 
     if json_out:
         print(json.dumps(to_json_dict(items), indent=2))
@@ -104,6 +105,9 @@ def pantry_list(all: bool = False, json_out: bool = typer.Option(False, "--json"
     for item in items:
         table.add_row(str(item.id), item.product_name, item.brand, item.expiry_date or "N/A", str(item.quantity), item.source)
     console.print(table)
+    for item in items:
+        if item.safety_note:
+            console.print(f"  [red]! {item.product_name}:[/red] {item.safety_note['risk_note']} {item.safety_note['advice']}")
 
 
 @pantry_app.command("add")
@@ -178,12 +182,18 @@ def digest(days: int = 5) -> None:
     console.print(f"  Expired: {len(payload['expired'])}")
     console.print(f"  Expiring soon: {len(payload['expiring_soon'])}")
     console.print(f"  New recalls: {len(payload['new_recalls'])}")
+    console.print(f"  Restock soon: {len(payload.get('restock_forecasts', []))}")
     for item in payload["expired"]:
         console.print(f"  [red]EXPIRED[/red] {item['product_name']} ({item['expiry_date']})")
+        note = item.get("safety_note")
+        if note:
+            console.print(f"    [dim]{note['risk_note']} {note['advice']}[/dim]")
     for item in payload["expiring_soon"]:
         console.print(f"  [yellow]soon[/yellow] {item['product_name']} ({item['expiry_date']})")
     for recall in payload["new_recalls"]:
         console.print(f"  [bold red]RECALL[/bold red] {recall['product_description']}")
+    for forecast in payload.get("restock_forecasts", []):
+        console.print(f"  [cyan]restock[/cyan] {forecast['message']}")
 
 
 @app.command()
@@ -221,6 +231,8 @@ def export(days: int = 5) -> None:
     lines = ["# Shopping list", ""]
     for item in expired:
         lines.append(f"- [ ] {item.product_name} (expired {item.expiry_date})")
+        note = safety.safety_note(item.product_name)
+        lines.append(f"  - {note['risk_note']} {note['advice']}")
     for item in expiring:
         lines.append(f"- [ ] {item.product_name} (expires {item.expiry_date})")
     if not (expired or expiring):

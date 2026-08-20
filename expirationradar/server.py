@@ -5,9 +5,12 @@ Serves web/ plus the frozen JSON API in docs/API.md:
     GET    /api/pantry             ?all=true       -> {"items": [PantryItem]}
     POST   /api/pantry             PantryItem     -> PantryItem
     POST   /api/pantry/{id}/consume               -> PantryItem
+    POST   /api/pantry/{id}/log-usage {percent_remaining} -> PantryItem
     DELETE /api/pantry/{id}                       -> {"deleted": true}
     GET    /api/digest             ?days=5        -> Digest
     GET    /api/recipes            ?days=5        -> {"suggestions": [...], "available": bool}
+    GET    /api/settings                          -> {"household_size": int}
+    POST   /api/settings           {household_size} -> {"household_size": int}
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from expirationradar import pantry, recipes, scan
+from expirationradar import pantry, recipes, restock, safety, scan
 from expirationradar.models import PantryItem, to_json_dict
 
 DEFAULT_PORT = 8000
@@ -46,6 +49,7 @@ DIGEST_PATH = pantry.DATA_DIR / "last_digest.json"
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _PANTRY_ITEM_RE = re.compile(r"^/api/pantry/(\d+)$")
 _PANTRY_CONSUME_RE = re.compile(r"^/api/pantry/(\d+)/consume$")
+_PANTRY_LOG_USAGE_RE = re.compile(r"^/api/pantry/(\d+)/log-usage$")
 
 
 class _BadRequestError(Exception):
@@ -53,7 +57,10 @@ class _BadRequestError(Exception):
 
 
 def _empty_digest(days: int) -> dict:
-    return {"generated_at": "", "days": days, "expiring_soon": [], "expired": [], "new_recalls": []}
+    return {
+        "generated_at": "", "days": days, "expiring_soon": [], "expired": [],
+        "new_recalls": [], "restock_forecasts": [],
+    }
 
 
 def read_digest(days: int = 5) -> dict:
@@ -238,12 +245,22 @@ class Handler(BaseHTTPRequestHandler):
                 items = pantry.list_items(conn, include_consumed=include_consumed)
             finally:
                 conn.close()
+            safety.annotate_expired(items)
             self._send_json(HTTPStatus.OK, {"items": to_json_dict(items)})
             return
 
         if path == "/api/digest":
             days = _int_query_param(query, "days", 5)
             self._send_json(HTTPStatus.OK, read_digest(days))
+            return
+
+        if path == "/api/settings":
+            conn = pantry.connect()
+            try:
+                household_size = int(pantry.get_setting(conn, "household_size", "1") or "1")
+            finally:
+                conn.close()
+            self._send_json(HTTPStatus.OK, {"household_size": household_size})
             return
 
         if path == "/api/recipes":
@@ -272,7 +289,24 @@ class Handler(BaseHTTPRequestHandler):
                 created = pantry.add_item(conn, item)
             finally:
                 conn.close()
+            safety.annotate_expired([created])
             self._send_json(HTTPStatus.CREATED, to_json_dict(created))
+            return
+
+        if path == "/api/settings":
+            body = self._read_json_body()
+            try:
+                household_size = int(body.get("household_size"))
+            except (TypeError, ValueError):
+                raise _BadRequestError("'household_size' must be an integer")
+            if household_size < 1:
+                raise _BadRequestError("'household_size' must be at least 1")
+            conn = pantry.connect()
+            try:
+                pantry.set_setting(conn, "household_size", str(household_size))
+            finally:
+                conn.close()
+            self._send_json(HTTPStatus.OK, {"household_size": household_size})
             return
 
         match = _PANTRY_CONSUME_RE.match(path)
@@ -285,6 +319,34 @@ class Handler(BaseHTTPRequestHandler):
             if updated is None:
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": "no such pantry item"})
                 return
+            safety.annotate_expired([updated])
+            self._send_json(HTTPStatus.OK, to_json_dict(updated))
+            return
+
+        match = _PANTRY_LOG_USAGE_RE.match(path)
+        if match:
+            item_id = int(match.group(1))
+            body = self._read_json_body()
+            percent = body.get("percent_remaining")
+            if not isinstance(percent, (int, float)) or isinstance(percent, bool):
+                raise _BadRequestError("'percent_remaining' is required and must be a number")
+            conn = pantry.connect()
+            try:
+                if pantry.get_item(conn, item_id) is None:
+                    self._send_json(HTTPStatus.NOT_FOUND, {"error": "no such pantry item"})
+                    return
+            finally:
+                conn.close()
+            try:
+                restock.log_usage(item_id, float(percent))
+            except ValueError as exc:
+                raise _BadRequestError(str(exc))
+            conn = pantry.connect()
+            try:
+                updated = pantry.get_item(conn, item_id)
+            finally:
+                conn.close()
+            safety.annotate_expired([updated])
             self._send_json(HTTPStatus.OK, to_json_dict(updated))
             return
 

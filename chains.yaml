@@ -14,3 +14,7 @@ chains:
     - model: gemma4:e4b-mlx
       samples: 1
       threshold: 0.5
+  restock_nudge:
+    - model: gemma4:e4b-mlx
+      samples: 1
+      threshold: 0.5

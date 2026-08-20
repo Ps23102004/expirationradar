@@ -10,6 +10,8 @@
       "added_at": "2026-08-20T09:14:40",
       "consumed_at": null,
       "notes": "",
+      "percent_remaining": 100.0,
+      "safety_note": null,
       "id": 1
     },
     {
@@ -22,6 +24,8 @@
       "added_at": "2026-08-20T09:14:40",
       "consumed_at": null,
       "notes": "",
+      "percent_remaining": 65.0,
+      "safety_note": null,
       "id": 2
     },
     {
@@ -34,6 +38,11 @@
       "added_at": "2026-08-10T18:02:11",
       "consumed_at": null,
       "notes": "back of the crisper drawer",
+      "percent_remaining": 100.0,
+      "safety_note": {
+        "risk_note": "Fresh produce mostly spoils visibly (mold, sliminess, rot) rather than posing a hidden risk.",
+        "advice": "Trim visibly spoiled parts, or toss the whole item once mold or a sour smell appears."
+      },
       "id": 3
     }
   ]

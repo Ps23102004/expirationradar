@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS pantry_items (
     source       TEXT    NOT NULL DEFAULT 'USER',
     added_at     TEXT    NOT NULL,
     consumed_at  TEXT,                          -- NULL = still active
-    notes        TEXT    NOT NULL DEFAULT ''
+    notes        TEXT    NOT NULL DEFAULT '',
+    percent_remaining REAL NOT NULL DEFAULT 100.0  -- manual self-report (Feature 1)
 );
 
 CREATE INDEX IF NOT EXISTS idx_pantry_active_expiry
@@ -60,7 +61,29 @@ CREATE TABLE IF NOT EXISTS watcher_runs (
     expired       INTEGER NOT NULL DEFAULT 0,
     error         TEXT    NOT NULL DEFAULT ''
 );
+
+-- One row per usage self-report (restock.py Feature 1). Consumption rate is
+-- fit from consecutive rows for a given item; needs >= 2 to say anything.
+CREATE TABLE IF NOT EXISTS consumption_log (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id           INTEGER NOT NULL REFERENCES pantry_items(id) ON DELETE CASCADE,
+    percent_remaining REAL    NOT NULL,
+    logged_at         TEXT    NOT NULL
+);
+
+-- Plain single-row-per-key store, no framework. Only `household_size` today.
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
+
+# Guards a column added after pantry_items already shipped (plan Feature 1).
+# CREATE TABLE IF NOT EXISTS above covers a fresh DB; existing DBs (e.g. the
+# real ~/.expirationradar/pantry.db from testing) need this ALTER TABLE once.
+_MIGRATIONS = (
+    "ALTER TABLE pantry_items ADD COLUMN percent_remaining REAL NOT NULL DEFAULT 100.0",
+)
 
 
 def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
@@ -74,6 +97,12 @@ def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    for migration in _MIGRATIONS:
+        try:
+            conn.execute(migration)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists — already-migrated DB
     return conn
 
 
@@ -93,11 +122,11 @@ def add_item(conn: sqlite3.Connection, item: PantryItem) -> PantryItem:
         """
         INSERT INTO pantry_items
             (product_name, brand, upc, expiry_date, quantity, source,
-             added_at, consumed_at, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             added_at, consumed_at, notes, percent_remaining)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (item.product_name, item.brand, item.upc, item.expiry_date, item.quantity,
-         item.source, item.added_at, item.consumed_at, item.notes),
+         item.source, item.added_at, item.consumed_at, item.notes, item.percent_remaining),
     )
     conn.commit()
     item.id = cur.lastrowid
@@ -180,6 +209,21 @@ def record_recall_hit(conn: sqlite3.Connection, item_id: int, match: RecallMatch
     return cur.rowcount > 0
 
 
+def get_setting(conn: sqlite3.Connection, key: str, default: str) -> str:
+    """Plain key/value read from `settings`. `default` if the key is unset."""
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+    conn.commit()
+
+
 def record_watcher_run(conn: sqlite3.Connection, run: WatcherRun) -> WatcherRun:
     if not run.ran_at:
         run.ran_at = _now()
@@ -204,7 +248,7 @@ def _demo() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         conn = connect(Path(tmp) / "t.db")
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        assert {"pantry_items", "recall_hits", "watcher_runs"} <= tables, tables
+        assert {"pantry_items", "recall_hits", "watcher_runs", "consumption_log", "settings"} <= tables, tables
         conn.execute(
             "INSERT INTO pantry_items (product_name, added_at) VALUES ('Milk', '2026-08-20')"
         )
@@ -216,7 +260,10 @@ def _demo() -> None:
                 (item_id,),
             )
         assert conn.execute("SELECT count(*) c FROM recall_hits").fetchone()["c"] == 1
-        connect(Path(tmp) / "t.db")  # idempotent re-open
+        assert get_setting(conn, "household_size", "1") == "1"
+        set_setting(conn, "household_size", "3")
+        assert get_setting(conn, "household_size", "1") == "3"
+        connect(Path(tmp) / "t.db")  # idempotent re-open, migration re-applies harmlessly
         print("pantry schema ok")
 
 

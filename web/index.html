@@ -48,6 +48,18 @@
             </label>
             <input class="sr-only" id="scan-photo" type="file" accept="image/*" capture="environment">
 
+            <button class="secondary-button camera-toggle" id="camera-toggle" type="button" hidden>
+              Use camera
+            </button>
+
+            <div class="camera-view" id="camera-view" hidden>
+              <video class="camera-view__video" id="camera-video" playsinline autoplay muted></video>
+              <div class="camera-view__actions">
+                <button class="primary-button" id="camera-capture" type="button">Capture photo</button>
+                <button class="secondary-button" id="camera-cancel" type="button">Cancel</button>
+              </div>
+            </div>
+
             <div class="photo-preview" id="photo-preview" hidden>
               <img id="photo-preview-image" alt="Preview of the selected pantry item">
               <button class="photo-preview__remove" id="remove-photo" type="button" aria-label="Remove selected photo">

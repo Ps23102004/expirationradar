@@ -91,14 +91,22 @@ HTTP 404 means.
   "added_at": "2026-08-20T09:14:40",
   "consumed_at": null,
   "notes": "",
+  "percent_remaining": 100.0,
+  "safety_note": null,
   "id": 1
 }
 ```
 
-- Strings default to `""` (never `null`) — only `consumed_at` and `id` are
-  nullable. `consumed_at: null` = still active.
+- Strings default to `""` (never `null`) — only `consumed_at`, `safety_note`
+  and `id` are nullable. `consumed_at: null` = still active.
 - `expiry_date: ""` = undated item; such items sort **last** in every list.
 - `id` is `null` only on a not-yet-inserted item (a POST request body).
+- `percent_remaining`: manual self-report (0-100), `100.0` until the user logs
+  usage via `POST /api/pantry/{id}/log-usage` (Feature 1 — restock
+  forecasting is deliberately not vision-based quantity estimation).
+- `safety_note`: `{risk_note, advice}` — set only when the item is actually
+  **expired** (past `expiry_date`, server-computed); `null` otherwise
+  (Feature 2). See `expirationradar/safety.py` for the category lookup.
 
 ---
 
@@ -165,6 +173,20 @@ No request body. Response `200` — the updated `PantryItem` with `consumed_at`
 set. The row is kept (history), not deleted. `404` if `id` doesn't exist.
 Idempotent: consuming an already-consumed item returns it unchanged, still 200.
 
+### `POST /api/pantry/{id}/log-usage`
+
+Manual self-report of how much of an item is left (Feature 1 — not
+vision-based quantity estimation). Request:
+
+```json
+{ "percent_remaining": 40.0 }
+```
+
+Response `200` — the updated `PantryItem`. `400` if `percent_remaining` is
+missing, not a number, or outside `0`-`100`. `404` if `id` doesn't exist.
+Each call also appends a `consumption_log` row; `days_until_empty` needs
+`>= 2` logged reports before a forecast exists.
+
 ### `DELETE /api/pantry/{id}`
 
 Hard-delete (the row and its recall hits). Response `200`:
@@ -187,14 +209,25 @@ Response `200` — a `Digest`. Fixture: **`tests/fixtures/digest.json`**.
   "days": 5,
   "expiring_soon": [ { "...PantryItem..." } ],
   "expired":       [ { "...PantryItem..." } ],
-  "new_recalls":   [ { "...RecallMatch..." } ]
+  "new_recalls":   [ { "...RecallMatch..." } ],
+  "restock_forecasts": [
+    { "item_id": 4, "item_name": "Olive Oil", "days_until_empty": 3.5,
+      "message": "Olive Oil is running low — about 3 days left for your household, might be worth restocking soon." }
+  ]
 }
 ```
 
 - `expiring_soon` = active, dated, expiring within `days`, not yet past.
-  `expired` = active and already past. The two never overlap.
+  `expired` = active and already past. The two never overlap. Every item in
+  `expired` carries a populated `safety_note`; `expiring_soon` items don't.
 - `new_recalls` = hits first seen by the most recent watcher pass — i.e. alerts
   the user has not been shown before.
+- `restock_forecasts` (Feature 1) = every active item whose consumption rate
+  projects `days_until_empty <= 7`, from `expirationradar.restock`. `message`
+  is chain-phrased (`restock_nudge` in `chains.yaml`) with a plain-template
+  fallback when the local model is unavailable — never absent, worst case a
+  template string. `[]` when nothing's low, and `[]` (missing key treated the
+  same) on a digest file written before this field existed.
 - This is the same payload the watcher writes to
   `~/.expirationradar/last_digest.json` and the same one `expirationradar
   digest` prints. One shape, three surfaces.
@@ -223,6 +256,18 @@ Response `200`:
 - `available: false` + `suggestions: []` when Ollama is off or the model isn't
   pulled. That is a **`200`**, not a 503 — the Pantry view shows a clean "N/A"
   panel. `uses` entries are `product_name` strings that match pantry items.
+
+### `GET /api/settings` / `POST /api/settings`
+
+Plain single-row-per-key store (Feature 1). Only `household_size` exists
+today, used to phrase restock nudges ("household of N").
+
+```json
+{ "household_size": 2 }
+```
+
+`GET` always `200`s (`1` if never set). `POST` takes the same shape, `200`
+with the new value. `400` if `household_size` isn't an integer `>= 1`.
 
 ---
 

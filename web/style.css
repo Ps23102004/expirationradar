@@ -259,6 +259,42 @@ input:focus-visible,
   color: var(--muted);
 }
 
+.camera-toggle {
+  min-height: 46px;
+}
+
+.camera-view {
+  position: relative;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium);
+  background: #000;
+}
+
+.camera-view[hidden] {
+  display: none;
+}
+
+.camera-view__video {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  background: #000;
+  object-fit: contain;
+}
+
+.camera-view__actions {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
+.camera-view__actions .primary-button {
+  flex: 1;
+}
+
 .photo-preview {
   position: relative;
   grid-column: 1 / -1;
@@ -908,6 +944,74 @@ input:focus-visible,
 .view-intro p:not(.section-kicker) {
   margin: 0;
   color: var(--muted);
+}
+
+.household-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-medium);
+  background: var(--surface);
+}
+
+.household-setting label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.household-setting input[type="number"] {
+  width: 4.5rem;
+  min-height: 40px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.household-setting__status {
+  color: var(--fair);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.pantry-item-card__usage {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  padding: 0 26px;
+}
+
+.pantry-item-card__usage label {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.pantry-item-card__usage-value {
+  color: var(--ink);
+}
+
+.pantry-item-card__usage-range {
+  min-height: 32px;
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.notice-bar--safety .notice-bar__icon {
+  background: var(--recall);
+}
+
+.notice-bar__advice {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
 }
 
 .pantry-list-section,

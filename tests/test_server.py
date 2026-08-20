@@ -217,7 +217,10 @@ def test_pantry_delete_missing_returns_404(live_server):
 def test_digest_missing_file_returns_empty_digest(live_server):
     status, payload = _get(live_server, "/api/digest")
     assert status == 200
-    assert payload == {"generated_at": "", "days": 5, "expiring_soon": [], "expired": [], "new_recalls": []}
+    assert payload == {
+        "generated_at": "", "days": 5, "expiring_soon": [], "expired": [],
+        "new_recalls": [], "restock_forecasts": [],
+    }
 
 
 def test_digest_custom_days_default_when_missing(live_server):
@@ -271,3 +274,83 @@ def test_recipes_available_true_when_suggest_implemented(live_server):
     assert status == 200
     assert payload["available"] is True
     assert payload["suggestions"][0]["title"] == "Milk toast"
+
+
+# -- /api/pantry/{id}/log-usage -------------------------------------------
+
+
+def test_log_usage_updates_percent_remaining(live_server):
+    _, created = _post(live_server, "/api/pantry", json.dumps({"product_name": "Milk"}).encode())
+    item_id = created["id"]
+    assert created["percent_remaining"] == 100.0
+
+    status, updated = _post(
+        live_server, f"/api/pantry/{item_id}/log-usage",
+        json.dumps({"percent_remaining": 40.0}).encode(),
+    )
+    assert status == 200
+    assert updated["percent_remaining"] == 40.0
+
+
+def test_log_usage_missing_item_404(live_server):
+    status, payload = _post(
+        live_server, "/api/pantry/999/log-usage", json.dumps({"percent_remaining": 40.0}).encode()
+    )
+    assert status == 404
+
+
+def test_log_usage_out_of_range_400(live_server):
+    _, created = _post(live_server, "/api/pantry", json.dumps({"product_name": "Milk"}).encode())
+    status, payload = _post(
+        live_server, f"/api/pantry/{created['id']}/log-usage",
+        json.dumps({"percent_remaining": 150.0}).encode(),
+    )
+    assert status == 400
+
+
+def test_log_usage_missing_field_400(live_server):
+    _, created = _post(live_server, "/api/pantry", json.dumps({"product_name": "Milk"}).encode())
+    status, payload = _post(live_server, f"/api/pantry/{created['id']}/log-usage", b"{}")
+    assert status == 400
+    assert "percent_remaining" in payload["error"]
+
+
+# -- /api/settings -----------------------------------------------------------
+
+
+def test_settings_default_household_size(live_server):
+    status, payload = _get(live_server, "/api/settings")
+    assert status == 200
+    assert payload == {"household_size": 1}
+
+
+def test_settings_post_updates_and_persists(live_server):
+    status, payload = _post(live_server, "/api/settings", json.dumps({"household_size": 4}).encode())
+    assert status == 200
+    assert payload == {"household_size": 4}
+
+    status, payload = _get(live_server, "/api/settings")
+    assert status == 200
+    assert payload == {"household_size": 4}
+
+
+def test_settings_post_invalid_400(live_server):
+    status, payload = _post(live_server, "/api/settings", json.dumps({"household_size": "many"}).encode())
+    assert status == 400
+
+    status, payload = _post(live_server, "/api/settings", json.dumps({"household_size": 0}).encode())
+    assert status == 400
+
+
+# -- expired-item safety_note wiring ----------------------------------------
+
+
+def test_pantry_get_annotates_safety_note_only_when_expired(live_server):
+    _post(live_server, "/api/pantry", json.dumps({"product_name": "Old Milk", "expiry_date": "2000-01-01"}).encode())
+    _post(live_server, "/api/pantry", json.dumps({"product_name": "Fresh Milk", "expiry_date": "2099-01-01"}).encode())
+
+    status, listing = _get(live_server, "/api/pantry")
+    assert status == 200
+    by_name = {i["product_name"]: i for i in listing["items"]}
+    assert by_name["Old Milk"]["safety_note"] is not None
+    assert by_name["Fresh Milk"]["safety_note"] is None

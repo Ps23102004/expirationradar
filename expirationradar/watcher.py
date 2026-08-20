@@ -16,7 +16,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from expirationradar import openfda, pantry, server
+from expirationradar import openfda, pantry, restock, safety, server
 from expirationradar.models import Digest, RecallMatch, WatcherRun, to_json_dict
 
 DEFAULT_DAYS = 5
@@ -130,6 +130,7 @@ def run_once(days: int = DEFAULT_DAYS) -> WatcherRun:
         # network step above failed entirely.
         expiring_soon = pantry.expiring_within(conn, days=days)
         expired = pantry.expired_items(conn)
+        safety.annotate_expired(expired)  # every one of these IS expired
 
         digest = Digest(
             generated_at=datetime.now().isoformat(timespec="seconds"),
@@ -137,6 +138,7 @@ def run_once(days: int = DEFAULT_DAYS) -> WatcherRun:
             expiring_soon=expiring_soon,
             expired=expired,
             new_recalls=new_hits,
+            restock_forecasts=restock.restock_digest(),
         )
         _write_digest(digest)
 

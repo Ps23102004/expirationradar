@@ -12,6 +12,8 @@
       "added_at": "2026-08-20T09:14:40",
       "consumed_at": null,
       "notes": "",
+      "percent_remaining": 65.0,
+      "safety_note": null,
       "id": 2
     }
   ],
@@ -26,6 +28,11 @@
       "added_at": "2026-08-10T18:02:11",
       "consumed_at": null,
       "notes": "back of the crisper drawer",
+      "percent_remaining": 100.0,
+      "safety_note": {
+        "risk_note": "Fresh produce mostly spoils visibly (mold, sliminess, rot) rather than posing a hidden risk.",
+        "advice": "Trim visibly spoiled parts, or toss the whole item once mold or a sour smell appears."
+      },
       "id": 3
     }
   ],
@@ -40,6 +47,14 @@
       "report_date": "20260805",
       "matched_on": "upc",
       "url": "https://api.fda.gov/food/enforcement.json?search=recall_number:%22F-0455-2026%22"
+    }
+  ],
+  "restock_forecasts": [
+    {
+      "item_id": 2,
+      "item_name": "Whole Milk, 1 gal",
+      "days_until_empty": 3.5,
+      "message": "Whole Milk, 1 gal is running low — about 4 days left for a household of 2, worth restocking soon."
     }
   ]
 }
