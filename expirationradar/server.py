@@ -108,9 +108,9 @@ def _recipes_payload(days: int) -> dict:
         conn.close()
     try:
         suggestions = recipes.suggest(items)
-    except NotImplementedError:
-        # recipes.py is a Phase 3 stub — degrade exactly like "Ollama off"
-        # does per docs/API.md: 200, available: false, never a 503.
+    except recipes.RecipesUnavailable:
+        # Ollama off / model not pulled / chain failed — degrade exactly per
+        # docs/API.md: 200, available: false, never a 503.
         return {"suggestions": [], "available": False}
     return {"suggestions": to_json_dict(suggestions), "available": True}
 

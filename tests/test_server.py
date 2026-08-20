@@ -244,10 +244,22 @@ def test_digest_reads_existing_file(live_server, tmp_path):
 # -- /api/recipes: the "Ollama off -> 200, never 503" contract -------------
 
 
-def test_recipes_available_false_when_not_implemented(live_server):
-    # recipes.suggest() is still a Phase 3 stub (raises NotImplementedError) —
-    # this must degrade exactly like Ollama-off, per docs/API.md.
+def test_recipes_available_true_but_empty_when_pantry_has_nothing_expiring(live_server):
+    # Real recipes.suggest() on an empty pantry: the chain never even runs,
+    # so this is "nothing to cook down", not "unavailable".
     status, payload = _get(live_server, "/api/recipes")
+    assert status == 200
+    assert payload == {"suggestions": [], "available": True}
+
+
+def test_recipes_available_false_when_chain_unavailable(live_server):
+    # Ollama off / model not pulled / chain failed -> 200, available: false,
+    # never a 503, per docs/API.md.
+    with patch.object(
+        server_module.recipes, "suggest",
+        side_effect=server_module.recipes.RecipesUnavailable("Ollama off"),
+    ):
+        status, payload = _get(live_server, "/api/recipes")
     assert status == 200
     assert payload == {"suggestions": [], "available": False}
 

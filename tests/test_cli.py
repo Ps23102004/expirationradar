@@ -125,8 +125,18 @@ def test_export_empty_pantry_says_no_action_needed():
     assert "good shape" in invocation.stdout
 
 
-def test_recipes_not_implemented_degrades_cleanly():
+def test_recipes_empty_pantry_says_nothing_to_cook():
     invocation = runner.invoke(cli.app, ["recipes"])
+    assert invocation.exit_code == 0
+    assert "nothing to cook down" in invocation.stdout.lower()
+
+
+def test_recipes_unavailable_degrades_cleanly():
+    with patch(
+        "expirationradar.cli.recipes_module.suggest",
+        side_effect=cli.recipes_module.RecipesUnavailable("Ollama off"),
+    ):
+        invocation = runner.invoke(cli.app, ["recipes"])
     assert invocation.exit_code == 0
     assert "not available" in invocation.stdout.lower() or "aren't available" in invocation.stdout
 

@@ -196,7 +196,7 @@ def recipes(days: int = 5) -> None:
         conn.close()
     try:
         suggestions = recipes_module.suggest(items)
-    except NotImplementedError:
+    except recipes_module.RecipesUnavailable:
         console.print("Recipe suggestions aren't available right now.")
         return
     if not suggestions:
