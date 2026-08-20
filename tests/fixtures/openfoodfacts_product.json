@@ -1,0 +1,22 @@
+{
+  "code": "0038000138416",
+  "status": 1,
+  "status_verbose": "product found",
+  "product": {
+    "product_name": "Crunchy Oat Granola",
+    "product_name_en": "Crunchy Oat Granola",
+    "brands": "Northvale Foods",
+    "brands_tags": [
+      "northvale-foods"
+    ],
+    "quantity": "12 oz",
+    "categories": "Breakfasts, Cereals and potatoes, Breakfast cereals, Granolas",
+    "categories_tags": [
+      "en:breakfast-cereals",
+      "en:granolas"
+    ],
+    "image_front_url": "https://images.openfoodfacts.org/images/products/003/800/013/8416/front_en.4.400.jpg",
+    "countries": "United States",
+    "last_modified_t": 1755600000
+  }
+}

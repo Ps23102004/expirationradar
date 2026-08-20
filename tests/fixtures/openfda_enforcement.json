@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "disclaimer": "Do not rely on openFDA to make decisions regarding medical care.",
+    "terms": "https://open.fda.gov/terms/",
+    "license": "https://open.fda.gov/license/",
+    "last_updated": "2026-08-13",
+    "results": {
+      "skip": 0,
+      "limit": 1,
+      "total": 1
+    }
+  },
+  "results": [
+    {
+      "status": "Ongoing",
+      "classification": "Class I",
+      "product_type": "Food",
+      "event_id": "93412",
+      "recall_number": "F-0455-2026",
+      "recalling_firm": "Northvale Foods, Inc.",
+      "address_1": "44 Industrial Way",
+      "address_2": "",
+      "city": "Northvale",
+      "state": "NJ",
+      "postal_code": "07647",
+      "country": "United States",
+      "voluntary_mandated": "Voluntary: Firm initiated",
+      "initial_firm_notification": "Press Release",
+      "distribution_pattern": "NY, NJ, CT, PA",
+      "product_description": "Crunchy Oat Granola, 12 oz box, UPC 0038000138416",
+      "product_quantity": "4,200 cases",
+      "reason_for_recall": "Undeclared milk allergen. Product may contain milk not listed on the label.",
+      "code_info": "UPC 0038000138416; Best By 11/14/2026 through 12/02/2026; lot codes NVF6203 - NVF6229",
+      "recall_initiation_date": "20260728",
+      "center_classification_date": "20260805",
+      "report_date": "20260805",
+      "termination_date": "",
+      "more_code_info": "",
+      "openfda": {}
+    }
+  ]
+}

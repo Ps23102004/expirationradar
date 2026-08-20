@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-08-20T08:30:02",
+  "days": 5,
+  "expiring_soon": [
+    {
+      "product_name": "Whole Milk, 1 gal",
+      "brand": "",
+      "upc": "",
+      "expiry_date": "2026-08-24",
+      "quantity": 1,
+      "source": "VISION",
+      "added_at": "2026-08-20T09:14:40",
+      "consumed_at": null,
+      "notes": "",
+      "id": 2
+    }
+  ],
+  "expired": [
+    {
+      "product_name": "Baby Spinach, 5 oz",
+      "brand": "Greenfield",
+      "upc": "0071430010112",
+      "expiry_date": "2026-08-18",
+      "quantity": 1,
+      "source": "USER",
+      "added_at": "2026-08-10T18:02:11",
+      "consumed_at": null,
+      "notes": "back of the crisper drawer",
+      "id": 3
+    }
+  ],
+  "new_recalls": [
+    {
+      "recall_number": "F-0455-2026",
+      "status": "Ongoing",
+      "classification": "Class I",
+      "reason": "Undeclared milk allergen. Product may contain milk not listed on the label.",
+      "product_description": "Crunchy Oat Granola, 12 oz box, UPC 0038000138416",
+      "recalling_firm": "Northvale Foods, Inc.",
+      "report_date": "20260805",
+      "matched_on": "upc",
+      "url": "https://api.fda.gov/food/enforcement.json?search=recall_number:%22F-0455-2026%22"
+    }
+  ]
+}

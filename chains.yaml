@@ -1,0 +1,13 @@
+chains:
+  vision_extract:
+    - model: qwen2.5vl:7b
+      samples: 1
+      threshold: 0.6
+  normalize_product:
+    - model: gemma4:e4b-mlx
+      samples: 3
+      threshold: 0.7
+  recipes:
+    - model: gemma4:e4b-mlx
+      samples: 1
+      threshold: 0.5

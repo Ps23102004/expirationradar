@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "expirationradar"
+version = "0.1.0"
+description = "Local-first pantry radar — photo → expiry dates via barcode/OCR, cross-referenced live against real FDA food recalls."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "typer",
+    "requests",
+    "pyyaml",
+    "llm-ladder",
+    "pytesseract",
+    "Pillow",
+    "pyzbar",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+expirationradar = "expirationradar.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["expirationradar"]
+
+# server.py resolves WEB_DIR as the package's parent / "web" — correct in an
+# editable install, so a real wheel needs web/ + chains.yaml force-included
+# next to the installed package for that resolution to land somewhere real.
+[tool.hatch.build.targets.wheel.force-include]
+"web" = "web"
+"chains.yaml" = "chains.yaml"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "expirationradar/*",
+    "web/*",
+    "chains.yaml",
+]
+
+[tool.hatch.build]
+include = [
+    "expirationradar/*",
+    "web/*",
+    "chains.yaml",
+]
+
+[tool.pytest.ini_options]
+markers = ["network: hits a live external API"]
+pythonpath = ["."]

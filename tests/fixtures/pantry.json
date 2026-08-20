@@ -1,0 +1,40 @@
+{
+  "items": [
+    {
+      "product_name": "Crunchy Oat Granola",
+      "brand": "Northvale Foods",
+      "upc": "0038000138416",
+      "expiry_date": "2026-11-14",
+      "quantity": 1,
+      "source": "BARCODE",
+      "added_at": "2026-08-20T09:14:40",
+      "consumed_at": null,
+      "notes": "",
+      "id": 1
+    },
+    {
+      "product_name": "Whole Milk, 1 gal",
+      "brand": "",
+      "upc": "",
+      "expiry_date": "2026-08-24",
+      "quantity": 1,
+      "source": "VISION",
+      "added_at": "2026-08-20T09:14:40",
+      "consumed_at": null,
+      "notes": "",
+      "id": 2
+    },
+    {
+      "product_name": "Baby Spinach, 5 oz",
+      "brand": "Greenfield",
+      "upc": "0071430010112",
+      "expiry_date": "2026-08-18",
+      "quantity": 1,
+      "source": "USER",
+      "added_at": "2026-08-10T18:02:11",
+      "consumed_at": null,
+      "notes": "back of the crisper drawer",
+      "id": 3
+    }
+  ]
+}
