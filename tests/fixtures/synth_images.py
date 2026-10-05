@@ -13,7 +13,19 @@ import barcode as pybarcode
 from barcode.writer import ImageWriter
 from PIL import Image, ImageDraw, ImageFont
 
-_FONT_PATH = "/System/Library/Fonts/Supplemental/Arial.ttf"
+_FONT_CANDIDATES = (
+    "/System/Library/Fonts/Supplemental/Arial.ttf",  # macOS
+    "DejaVuSans.ttf",  # Linux (fonts-dejavu-core)
+)
+
+
+def _font(size: int):
+    for name in _FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    return ImageFont.load_default(size)
 
 
 def ean13_png(payload_12_digits: str, rotate: int = 0) -> bytes:
@@ -42,7 +54,7 @@ def text_png(lines: list[str], size: tuple[int, int] = (600, 300)) -> bytes:
     like scattered print on packaging (product name, then a date stamp)."""
     image = Image.new("RGB", size, "white")
     draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype(_FONT_PATH, 28)
+    font = _font(28)
     y = 20
     for line in lines:
         draw.text((20, y), line, fill="black", font=font)

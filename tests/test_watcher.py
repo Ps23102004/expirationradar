@@ -10,6 +10,7 @@ touch a real launchd job (subprocess is always mocked).
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -33,6 +34,9 @@ def _match(recall_number="F-0455-2026", status="Ongoing"):
     )
 
 
+# Two days out, so the item is always inside the 5-day window the tests use.
+SOON = (date.today() + timedelta(days=2)).isoformat()
+
 @pytest.fixture
 def rigged(tmp_path, monkeypatch):
     """Point every path the watcher touches at tmp_path; nothing real is touched."""
@@ -47,7 +51,7 @@ def rigged(tmp_path, monkeypatch):
 
 def test_idempotent_second_pass_reports_zero_new(rigged):
     add_item(rigged, PantryItem(product_name="Crunchy Oat Granola", upc="0038000138416",
-                                 expiry_date="2026-08-22"))
+                                 expiry_date=SOON))
     with patch.object(openfda, "search_by_upc", return_value=[_match()]), \
          patch.object(openfda, "search_by_terms", return_value=[]):
         first = watcher.run_once(days=5)
@@ -65,7 +69,7 @@ def test_idempotent_second_pass_no_new_notification(rigged):
     """The notification-worthy 'new' set (recalls + newly-crossed expiry) is
     empty on a second pass over unchanged state."""
     add_item(rigged, PantryItem(product_name="Crunchy Oat Granola", upc="0038000138416",
-                                 expiry_date="2026-08-22"))
+                                 expiry_date=SOON))
     with patch.object(openfda, "search_by_upc", return_value=[_match()]), \
          patch.object(openfda, "search_by_terms", return_value=[]), \
          patch.object(watcher, "_notify") as notify:
@@ -109,7 +113,7 @@ def test_digest_shape_matches_fixture(rigged):
 
 
 def test_watch_log_appended(rigged):
-    add_item(rigged, PantryItem(product_name="Milk", expiry_date="2026-08-22"))
+    add_item(rigged, PantryItem(product_name="Milk", expiry_date=SOON))
     with patch.object(openfda, "search_by_upc", return_value=[]), \
          patch.object(openfda, "search_by_terms", return_value=[]):
         watcher.run_once(days=5)
