@@ -1,5 +1,7 @@
 # ExpirationRadar
 
+[![tests](https://github.com/Ps23102004/expirationradar/actions/workflows/tests.yml/badge.svg)](https://github.com/Ps23102004/expirationradar/actions/workflows/tests.yml)
+
 Photo of your pantry in, expiry dates and live FDA recall checks out —
 computed on your machine.
 

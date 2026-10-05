@@ -13,7 +13,7 @@ dependencies = [
     "typer",
     "requests",
     "pyyaml",
-    "llm-ladder",
+    "llm-ladder @ git+https://github.com/Ps23102004/llm-ladder.git@db9ba93e83325010cdd1050153adca73ceac7af2",
     "pytesseract",
     "Pillow",
     "pyzbar",
@@ -24,6 +24,9 @@ dev = ["pytest", "python-barcode"]
 
 [project.scripts]
 expirationradar = "expirationradar.cli:app"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["expirationradar"]
