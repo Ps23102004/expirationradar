@@ -99,7 +99,7 @@ def test_network_down_expiry_check_still_completes(rigged):
 
 
 def test_digest_shape_matches_fixture(rigged):
-    add_item(rigged, PantryItem(product_name="Whole Milk, 1 gal", expiry_date="2026-08-24"))
+    add_item(rigged, PantryItem(product_name="Whole Milk, 1 gal", expiry_date=SOON))
     with patch.object(openfda, "search_by_upc", return_value=[]), \
          patch.object(openfda, "search_by_terms", return_value=[]):
         watcher.run_once(days=5)
